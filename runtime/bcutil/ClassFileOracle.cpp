@@ -57,6 +57,9 @@ ClassFileOracle::KnownAnnotation ClassFileOracle::_knownAnnotations[] = {
 		{CONTENDED_SIGNATURE, sizeof(CONTENDED_SIGNATURE)},
 #undef CONTENDED_SIGNATURE
 		{J9_UNMODIFIABLE_CLASS_ANNOTATION, sizeof(J9_UNMODIFIABLE_CLASS_ANNOTATION)},
+#define LAMBDAFORM_HIDDEN_SIGNATURE "Ljava/lang/invoke/LambdaForm$Hidden;"
+		{LAMBDAFORM_HIDDEN_SIGNATURE, sizeof(LAMBDAFORM_HIDDEN_SIGNATURE)},
+#undef LAMBDAFORM_HIDDEN_SIGNATURE
 		{0, 0}
 };
 
@@ -654,6 +657,7 @@ ClassFileOracle::walkMethodAttributes(U_16 methodIndex)
 			knownAnnotations = addAnnotationBit(knownAnnotations, FRAMEITERATORSKIP_ANNOTATION);
 			knownAnnotations = addAnnotationBit(knownAnnotations, SUN_REFLECT_CALLERSENSITIVE_ANNOTATION);
 			knownAnnotations = addAnnotationBit(knownAnnotations, JDK_INTERNAL_REFLECT_CALLERSENSITIVE_ANNOTATION);
+			knownAnnotations = addAnnotationBit(knownAnnotations, LAMBDAFORM_HIDDEN_ANNOTATION);
 
 			J9CfrAttributeRuntimeVisibleAnnotations *attribAnnotations = (J9CfrAttributeRuntimeVisibleAnnotations *)attrib;
 			if (0 == attribAnnotations->rawDataLength) { /* rawDataLength non-zero in case of error in the attribute */
@@ -668,6 +672,10 @@ ClassFileOracle::walkMethodAttributes(U_16 methodIndex)
 					if (containsKnownAnnotation(foundAnnotations, FRAMEITERATORSKIP_ANNOTATION)) {
 						_methodsInfo[methodIndex].modifiers |= J9AccMethodFrameIteratorSkip;
 					}
+				}
+				if (containsKnownAnnotation(foundAnnotations, LAMBDAFORM_HIDDEN_ANNOTATION)) {
+					/* J9AccMethodHasExtendedModifiers in the modifiers is set when the ROM class is written */
+					_methodsInfo[methodIndex].extendedModifiers |= CFR_METHOD_EXT_LAMBDAFORM_HIDDEN_ANNOTATIONS;
 				}
 			}
 			_methodsInfo[methodIndex].annotationsAttribute = attribAnnotations;
