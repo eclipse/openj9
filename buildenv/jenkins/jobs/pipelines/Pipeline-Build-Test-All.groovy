@@ -347,6 +347,8 @@ pipelineNames = []
 pipelinesStatus = [:]
 buildFile = ''
 
+echo "Hello World!"
+
 try {
     timeout(time: TIMEOUT_TIME.toInteger(), unit: TIMEOUT_UNIT) {
         timestamps {
