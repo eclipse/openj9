@@ -1892,7 +1892,7 @@ done:
 				VMStructHasBeenUpdated(REGISTER_ARGS);
 				restoreSpecialStackFrameLeavingArgs(REGISTER_ARGS, bp);
 				/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
-				if (methodIsCompiled(_sendMethod)) {
+				if (methodIsCompiledTRJIT(_sendMethod) || methodIsCompiledMJIT(_sendMethod)) {
 					runMethodCompiled = true;
 				}
 				break;
