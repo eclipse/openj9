@@ -309,6 +309,12 @@ class OMR_EXTENSIBLE Options : public OMR::OptionsConnector
 
    static int32_t _expensiveCompWeight; // weight of a comp request to be considered expensive
    static int32_t _jProfilingEnablementSampleThreshold;
+  
+   static int32_t getMJITEnabled() { return _mjitEnabled; }
+   static int32_t _mjitEnabled;
+
+   static int32_t getMJITInitialCount() { return _mjitInitialCount; }
+   static int32_t _mjitInitialCount;
 
    static bool _aggressiveLockReservation;
 

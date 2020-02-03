@@ -501,7 +501,9 @@ retry:
 	{
 		VM_BytecodeAction rc = RUN_METHOD_INTERPRETED;
 		J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(_sendMethod);
-		void* const jitStartAddress = _sendMethod->extra;
+		void* mjitExtra = _sendMethod->extra2;
+		bool useMJITExtra = (mjitExtra && J9_ARE_NO_BITS_SET((UDATA)mjitExtra, J9_STARTPC_NOT_TRANSLATED));
+		void* const jitStartAddress = useMJITExtra ? mjitExtra : _sendMethod->extra;
 		if (startAddressIsCompiled((UDATA)jitStartAddress)) {
 			/* If we are single stepping, or about to run a breakpointed method, fall back to the interpreter.
 			 * Check FSD enabled first, to minimize the number of extra instructions in the normal execution path
@@ -1851,6 +1853,8 @@ done:
 
 	VMINLINE bool startAddressIsCompiled(UDATA extra) { return J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED); }
 	VMINLINE bool methodIsCompiled(J9Method *method) { return startAddressIsCompiled((UDATA)method->extra); }
+    VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra);  }
+    VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2);     }
 	VMINLINE bool singleStepEnabled() { return 0 != _vm->jitConfig->singleStepCount; }
 	VMINLINE bool methodIsBreakpointed(J9Method *method) { return J9_ARE_ANY_BITS_SET((UDATA)method->constantPool, J9_STARTPC_METHOD_BREAKPOINTED); }
 	VMINLINE bool methodCanBeRunCompiled(J9Method *method) { return !singleStepEnabled() && !methodIsBreakpointed(method); }
@@ -1859,10 +1863,12 @@ done:
 	countAndCompile(REGISTER_ARGS_LIST)
 	{
 		bool runMethodCompiled = false;
+		UDATA mjitExtra = 0;
 		UDATA preCount = 0;
 		UDATA postCount = 0;
 		UDATA result = 0;
 		do {
+			mjitExtra = (UDATA)_sendMethod->extra2;
 			preCount = (UDATA)_sendMethod->extra;
 			postCount = preCount - _currentThread->jitCountDelta;
 			if (J9_ARE_NO_BITS_SET(preCount, J9_STARTPC_NOT_TRANSLATED)) {
@@ -1886,10 +1892,35 @@ done:
 				VMStructHasBeenUpdated(REGISTER_ARGS);
 				restoreSpecialStackFrameLeavingArgs(REGISTER_ARGS, bp);
 				/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
-				if (methodIsCompiled(_sendMethod)) {
+				if (methodIsCompiledTRJIT(_sendMethod) || methodIsCompiledMJIT(_sendMethod)) {
 					runMethodCompiled = true;
 				}
 				break;
+			}
+			if(mjitExtra) {
+				if (J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) {
+					/* Already compiled with MJIT */
+					runMethodCompiled = true;
+				} else if (mjitExtra < 0) {
+					// This method should not be translated by MJIT (already failed), but must keep counting
+				} else if ((IDATA)postCount < (IDATA)mjitExtra) {
+					/* Attempt to compile the method */
+					UDATA *bp = buildMethodFrame(REGISTER_ARGS, _sendMethod, 0);
+					updateVMStruct(REGISTER_ARGS);
+					/* this call cannot change bp as no java code is run */
+					UDATA oldState = pushVMState(REGISTER_ARGS, J9VMSTATE_JIT_CODEGEN);
+					J9JITConfig *jitConfig = _vm->jitConfig;
+					jitConfig->entryPoint(jitConfig, _currentThread, _sendMethod, 0);
+					popVMState(REGISTER_ARGS, oldState);
+					VMStructHasBeenUpdated(REGISTER_ARGS);
+					restoreSpecialStackFrameLeavingArgs(REGISTER_ARGS, bp);
+					/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
+							/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
+					if (methodIsCompiledTRJIT(_sendMethod) || methodIsCompiledMJIT(_sendMethod)) {
+						runMethodCompiled = true;
+					}
+					break;
+				}
 			}
 			result = VM_AtomicSupport::lockCompareExchange((UDATA*)&_sendMethod->extra, preCount, postCount);
 			/* If count updates, run method interpreted, else loop around and try again */

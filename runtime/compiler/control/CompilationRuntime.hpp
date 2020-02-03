@@ -657,6 +657,14 @@ public:
       method->extra = reinterpret_cast<void *>(value);
       }
 
+   static void setInitialMJITCountUnsynchronized(J9Method *method, int32_t mjitThreshold, int32_t trThreshold)
+      {
+      int32_t value = 0;
+      if(mjitThreshold > trThreshold)
+         value = ((trThreshold - mjitThreshold) << 1  ) | 1 << 1;
+      method->extra2 = reinterpret_cast<void *>(value);
+      }
+
    static uint32_t getMethodBytecodeSize(const J9ROMMethod * romMethod);
    static uint32_t getMethodBytecodeSize(J9Method* method);
 
