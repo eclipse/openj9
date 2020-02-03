@@ -44,6 +44,7 @@ class TR_FrontEnd;
 class TR_OpaqueMethodBlock;
 class TR_OptimizationPlan;
 class TR_ResolvedMethod;
+namespace MJIT { class CodeGenerator; }
 namespace TR { class Instruction; }
 namespace TR { class SymbolReference; }
 
@@ -323,6 +324,7 @@ class TR_PersistentJittedBodyInfo
    friend class ::OMR::Options;
    friend class J9::Options;
    friend class TR_DebugExt;
+   friend class MJIT::CodeGenerator;
 
 #if defined(TR_HOST_X86) || defined(TR_HOST_POWER) || defined(TR_HOST_S390) || defined(TR_HOST_ARM) || defined(TR_HOST_ARM64)
    friend void fixPersistentMethodInfo(void *table, bool isJITClientAOTLoad);

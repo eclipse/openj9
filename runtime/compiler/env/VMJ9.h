@@ -1251,6 +1251,7 @@ struct TR_PCMap
 typedef J9JITExceptionTable TR_MethodMetaData;
 
 TR_MethodMetaData * createMethodMetaData(TR_J9VMBase &, TR_ResolvedMethod *, TR::Compilation *);
+TR_MethodMetaData * createMJITMethodMetaData(TR_J9VMBase &, TR_ResolvedMethod *, TR::Compilation *);
 
 extern J9JITConfig * jitConfig;
 

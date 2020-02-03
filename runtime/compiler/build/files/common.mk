@@ -341,6 +341,7 @@ JIT_PRODUCT_SOURCE_FILES+=\
     compiler/optimizer/J9EstimateCodeSize.cpp \
     compiler/optimizer/J9Inliner.cpp \
     compiler/optimizer/InterpreterEmulator.cpp \
+    compiler/microjit/ExceptionTable.cpp \
     compiler/ras/DebugExt.cpp \
     compiler/ras/DebugExtSegmentProvider.cpp \
     compiler/ras/HashTable.cpp \
