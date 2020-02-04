@@ -29,6 +29,7 @@ PRODUCT_INCLUDES=\
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/compiler \
+    $(FIXED_SRCBASE)/compiler/microjit \
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/omr/compiler \

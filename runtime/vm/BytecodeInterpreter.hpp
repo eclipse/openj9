@@ -1853,8 +1853,8 @@ done:
 
 	VMINLINE bool startAddressIsCompiled(UDATA extra) { return J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED); }
 	VMINLINE bool methodIsCompiled(J9Method *method) { return startAddressIsCompiled((UDATA)method->extra); }
-    VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra);  }
-    VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2);     }
+	VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra);  }
+	VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2);     }
 	VMINLINE bool singleStepEnabled() { return 0 != _vm->jitConfig->singleStepCount; }
 	VMINLINE bool methodIsBreakpointed(J9Method *method) { return J9_ARE_ANY_BITS_SET((UDATA)method->constantPool, J9_STARTPC_METHOD_BREAKPOINTED); }
 	VMINLINE bool methodCanBeRunCompiled(J9Method *method) { return !singleStepEnabled() && !methodIsBreakpointed(method); }
@@ -1892,7 +1892,7 @@ done:
 				VMStructHasBeenUpdated(REGISTER_ARGS);
 				restoreSpecialStackFrameLeavingArgs(REGISTER_ARGS, bp);
 				/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
-				if (methodIsCompiledTRJIT(_sendMethod) || methodIsCompiledMJIT(_sendMethod)) {
+				if (methodIsCompiled(_sendMethod)) {
 					runMethodCompiled = true;
 				}
 				break;
