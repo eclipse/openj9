@@ -661,7 +661,7 @@ public:
       {
       int32_t value = (mjitThreshold << 1) | 1;
       if(mjitThreshold > trThreshold)
-         value = 0;
+         value = ((trThreshold - mjitThreshold) << 1  ) | 1;
       method->extra2 = reinterpret_cast<void *>(value);
       }
 
