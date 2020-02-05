@@ -659,9 +659,9 @@ public:
 
    static void setInitialMJITCountUnsynchronized(J9Method *method, int32_t mjitThreshold, int32_t trThreshold)
       {
-      int32_t value = 0;
+      int32_t value = (mjitThreshold << 1) | 1;
       if(mjitThreshold > trThreshold)
-         value = ((trThreshold - mjitThreshold) << 1  ) | 1;
+         value = 0;
       method->extra2 = reinterpret_cast<void *>(value);
       }
 
