@@ -1,23 +1,18 @@
 ; add all labels to global list if intending to use in CodeGenerator
 %include "utils.nasm"
 
-declare_template addAndReturn
 declare_template debugBreakpoint
 declare_template iLoad0Template
 declare_template iLoad1Template
 declare_template iLoad2Template
 declare_template iAddTemplate
+declare_template iSubTemplate
 declare_template iReturnTemplate
 
 ; rsp is the stack base for the java stack pointer.
 ; r10 will hold the java stack pointer.
 ; r11 stores the accumulator
 ; r12 stores the value which will act on the accumulator
-
-; used to solve intial problem static add(II)I
-addAndReturn:
-    add rax, rsi    ; add second argument to first
-    ret             ; return
 
 debugBreakpoint:
     int3           ; trigger hardware interrupt
@@ -41,15 +36,22 @@ iAddTemplate:
     add r11, r12    ; add the value to the accumulator
     mov [r10], r11  ; write the accumulator over the second arg.
 
+iSubTemplate:
+    mov r12, [r10]  ; copy top value of stack in the value register
+    add r10, 8      ; reduce the stack size by 1 slot (8 bytes)
+    mov r11, [r10]  ; copy second value to the accumulator register
+    sub r11, r12    ; subtract the value from the accumulator
+    mov [r10], r11  ; write the accumulator over the second arg.    
+
 iReturnTemplate:
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
     ret             ; return from the JITed method. (TODO: is ret correct here?)
 endOfBytecodeTemplates:
 
-addAndReturnSize:       dw  debugBreakpoint         -   addAndReturn
 debugBreakpointSize:    dw  iLoad0Template          -   debugBreakpoint
 iLoad0TemplateSize:     dw  iLoad1Template          -   iLoad0Template
 iLoad1TemplateSize:     dw  iLoad2Template          -   iLoad1Template
 iLoad2TemplateSize:     dw  iAddTemplate            -   iLoad2Template
-iAddTemplateSize:       dw  iReturnTemplate         -   iAddTemplate
+iAddTemplateSize:       dw  iSubTemplate            -   iAddTemplate
+iSubTemplateSize:       dw  iReturnTemplate         -   iSubTemplate
 iReturnTemplateSize:    dw  endOfBytecodeTemplates  -   iReturnTemplate

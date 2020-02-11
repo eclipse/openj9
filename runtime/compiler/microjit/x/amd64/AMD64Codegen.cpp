@@ -129,12 +129,12 @@ DECLARE_TEMPLATE(jumpRDI);
 DECLARE_TEMPLATE(jumpRAX);
 
 // bytecodes
-DECLARE_TEMPLATE(addAndReturn);
 DECLARE_TEMPLATE(debugBreakpoint);
 DECLARE_TEMPLATE(iLoad0Template);
 DECLARE_TEMPLATE(iLoad1Template);
 DECLARE_TEMPLATE(iLoad2Template);
 DECLARE_TEMPLATE(iAddTemplate);
+DECLARE_TEMPLATE(iSubTemplate);
 DECLARE_TEMPLATE(iReturnTemplate);
 
 static void 
@@ -1319,6 +1319,10 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 trfprintf(_logFileFP, "J9BCiadd\n");
                 COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
                 break;
+            case TR_J9ByteCode::J9BCisub:
+                trfprintf(_logFileFP, "J9BCisub\n");
+                COPY_TEMPLATE(buffer, iSubTemplate, codeGenSize);
+                break;
             case TR_J9ByteCode::J9BCgenericReturn:
                 trfprintf(_logFileFP, "J9BCgenericReturn\n");
                 if(method->returnType() == TR::Int32)
@@ -1356,14 +1360,6 @@ MJIT::CodeGenerator::generateColdArea(char* buffer, J9Method* method, char* jitS
     PATCH_RELATIVE_ADDR(buffer, jump4ByteRel, jitStackOverflowJumpPatchLocation);
 
     return coldAreaSize;
-}
-
-buffer_size_t
-MJIT::CodeGenerator::generateAddAndReturn(char* buffer) {
-    buffer_size_t codeGenSize = 0;
-    COPY_TEMPLATE(buffer, debugBreakpoint, codeGenSize);
-    COPY_TEMPLATE(buffer, addAndReturn, codeGenSize);
-    return codeGenSize;
 }
 
 buffer_size_t

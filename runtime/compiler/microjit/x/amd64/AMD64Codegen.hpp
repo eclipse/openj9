@@ -243,11 +243,6 @@ class CodeGenerator {
         buffer_size_t generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci, int32_t);
 
         /**
-         * Used for testing the static method add(II)I.
-         */
-        buffer_size_t generateAddAndReturn(char* buffer);
-
-         /**
          * Generate an int3 for signaling debug breakpoint for Linux x86
          * @param buffer    code buffer
          */
