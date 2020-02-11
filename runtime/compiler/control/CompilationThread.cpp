@@ -9144,6 +9144,15 @@ TR::CompilationInfoPerThreadBase::mjit(
       // Uncomment this to set generated method address
       method->extra2 = prologue_address;
 
+      if(method->extra2)
+         {         
+         trfprintf(
+            this->getCompilation()->getOutFile(), 
+            "\n"
+            "MJIT:%s",
+            compilee->signature(compiler->trMemory()));
+         }
+      
       // END MICROJIT
 
       }
