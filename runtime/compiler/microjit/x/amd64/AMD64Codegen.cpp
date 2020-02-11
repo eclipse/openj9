@@ -135,6 +135,7 @@ DECLARE_TEMPLATE(iLoad1Template);
 DECLARE_TEMPLATE(iLoad2Template);
 DECLARE_TEMPLATE(iAddTemplate);
 DECLARE_TEMPLATE(iSubTemplate);
+DECLARE_TEMPLATE(iMulTemplate);
 DECLARE_TEMPLATE(iReturnTemplate);
 
 static void 
@@ -1322,6 +1323,10 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             case TR_J9ByteCode::J9BCisub:
                 trfprintf(_logFileFP, "J9BCisub\n");
                 COPY_TEMPLATE(buffer, iSubTemplate, codeGenSize);
+                break;
+            case TR_J9ByteCode::J9BCimul:
+                trfprintf(_logFileFP, "J9BCimul\n");
+                COPY_TEMPLATE(buffer, iMulTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCgenericReturn:
                 trfprintf(_logFileFP, "J9BCgenericReturn\n");

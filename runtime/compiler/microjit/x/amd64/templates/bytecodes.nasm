@@ -7,6 +7,7 @@ declare_template iLoad1Template
 declare_template iLoad2Template
 declare_template iAddTemplate
 declare_template iSubTemplate
+declare_template iMulTemplate
 declare_template iReturnTemplate
 
 ; rsp is the stack base for the java stack pointer.
@@ -43,6 +44,13 @@ iSubTemplate:
     sub r11, r12    ; subtract the value from the accumulator
     mov [r10], r11  ; write the accumulator over the second arg.    
 
+iMulTemplate:
+    mov r11, [r10]  ; pop first value off java stack into the accumulator
+    add r10, 8      ; which means reducing the stack size by 1 slot (8 bytes)
+    mov r12, [r10]  ; copy second value to the value register
+    imul r11, r12   ; multiply accumulator by the value to the accumulator
+    mov [r10], r11  ; write the accumulator over the second arg.
+
 iReturnTemplate:
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
     ret             ; return from the JITed method. (TODO: is ret correct here?)
@@ -53,5 +61,6 @@ iLoad0TemplateSize:     dw  iLoad1Template          -   iLoad0Template
 iLoad1TemplateSize:     dw  iLoad2Template          -   iLoad1Template
 iLoad2TemplateSize:     dw  iAddTemplate            -   iLoad2Template
 iAddTemplateSize:       dw  iSubTemplate            -   iAddTemplate
-iSubTemplateSize:       dw  iReturnTemplate         -   iSubTemplate
+iSubTemplateSize:       dw  iMulTemplate            -   iSubTemplate
+iMulTemplateSize:       dw  iReturnTemplate         -   iMulTemplate
 iReturnTemplateSize:    dw  endOfBytecodeTemplates  -   iReturnTemplate
