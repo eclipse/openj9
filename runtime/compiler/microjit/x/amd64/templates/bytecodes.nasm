@@ -8,6 +8,7 @@ declare_template iLoad2Template
 declare_template iAddTemplate
 declare_template iSubTemplate
 declare_template iMulTemplate
+declare_template iDivTemplate
 declare_template iReturnTemplate
 
 ; rsp is the stack base for the java stack pointer.
@@ -51,6 +52,23 @@ iMulTemplate:
     imul r11, r12   ; multiply accumulator by the value to the accumulator
     mov [r10], r11  ; write the accumulator over the second arg.
 
+iDivTemplate:
+    mov r12, [r10]  ; copy top value of stack in the value register (denominator)
+    add r10, 8      ; reduce the stack size by 1 slot (8 bytes)
+    mov r11, [r10]  ; copy second value to the accumulator register (numerator)
+    mov [r10], rdx  ; Save rdx to first location in stack
+    sub r10, 8      ; Add 1 slot to stack (8 bytes)
+    mov [r10], rax  ; Save rax to first location in stack
+    xor rdx, rdx    ; zero rdx (will store remainder -- not needed)
+    mov rax, r11    ; copy value 1 to rax (numerator)
+    idiv r12        ; divide rdx:rax by r12 value (denominator)
+    mov r11, rax    ; store the quotient in accumulator
+    mov rax, [r10]  ; restore rax
+    add r10, 8      ; reduce stack size by 1 slot (8 bytes)
+    mov rdx, [r10]  ; restore rdx
+    add r10, 8      ; reduce stack size by 1 slot (8 bytes)
+    mov [r10], r11  ; write the quotient to the top stack slot
+
 iReturnTemplate:
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
     ret             ; return from the JITed method. (TODO: is ret correct here?)
@@ -62,5 +80,6 @@ iLoad1TemplateSize:     dw  iLoad2Template          -   iLoad1Template
 iLoad2TemplateSize:     dw  iAddTemplate            -   iLoad2Template
 iAddTemplateSize:       dw  iSubTemplate            -   iAddTemplate
 iSubTemplateSize:       dw  iMulTemplate            -   iSubTemplate
-iMulTemplateSize:       dw  iReturnTemplate         -   iMulTemplate
+iMulTemplateSize:       dw  iDivTemplate            -   iMulTemplate
+iDivTemplateSize:       dw  iReturnTemplate         -   iDivTemplate
 iReturnTemplateSize:    dw  endOfBytecodeTemplates  -   iReturnTemplate
