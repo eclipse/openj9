@@ -21,11 +21,11 @@ debugBreakpoint:
 
 iLoad0Template:
     sub r10, 8      ; add 1 slot to stack (8 bytes)
-    mov [r10], rax  ; push 1st argument (rax) onto stack 
+    mov [r10], rax  ; push 1st argument (rax) onto stack (todo: replace with load from local-array)
 
 iLoad1Template:
     sub r10, 8      ; add 1 slot to stack (8 bytes)
-    mov [r10], rsi  ; move 2nd argument into first location in stack
+    mov [r10], rsi  ; move 2nd argument into first location in stack (todo: replace with load from local-array)
 
 iLoad2Template:
     sub r10, 8      ; add 1 slot to stack (8 bytes)
@@ -53,21 +53,12 @@ iMulTemplate:
     mov [r10], r11  ; write the accumulator over the second arg.
 
 iDivTemplate:
-    mov r12, [r10]  ; copy top value of stack in the value register (denominator)
-    add r10, 8      ; reduce the stack size by 1 slot (8 bytes)
-    mov r11, [r10]  ; copy second value to the accumulator register (numerator)
-    mov [r10], rdx  ; Save rdx to first location in stack
-    sub r10, 8      ; Add 1 slot to stack (8 bytes)
-    mov [r10], rax  ; Save rax to first location in stack
-    xor rdx, rdx    ; zero rdx (will store remainder -- not needed)
-    mov rax, r11    ; copy value 1 to rax (numerator)
-    idiv r12        ; divide rdx:rax by r12 value (denominator)
-    mov r11, rax    ; store the quotient in accumulator
-    mov rax, [r10]  ; restore rax
-    add r10, 8      ; reduce stack size by 1 slot (8 bytes)
-    mov rdx, [r10]  ; restore rdx
-    add r10, 8      ; reduce stack size by 1 slot (8 bytes)
-    mov [r10], r11  ; write the quotient to the top stack slot
+    mov r12, [r10]        ; copy top value of stack in the value register (divisor)
+    add r10, 8            ; reduce the stack size by 1 slot (8 bytes)
+    mov eax, [r10]        ; copy second value (dividend) to eax
+    cdq                   ; extend sign bit from rax to rdx
+    idiv r12d             ; divide rdx:rax by lower 32bits of r12 value 
+    mov [r10], eax        ; store the quotient in accumulator
 
 iReturnTemplate:
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
