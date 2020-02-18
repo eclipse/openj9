@@ -9030,7 +9030,6 @@ TR::CompilationInfoPerThreadBase::mjit(
          cursor,
          method,
          &jitStackOverflowPatchLocation,
-         &peakAllocSize,
          magicWordLocation,
          first2BytesPatchLocation,
          &firstInstructionLocation);
@@ -9062,7 +9061,7 @@ TR::CompilationInfoPerThreadBase::mjit(
             
       bool codegen_failed = false;
 
-      code_size = mjit_cg.generateBody(cursor, compilee, &bcIterator, peakAllocSize);
+      code_size = mjit_cg.generateBody(cursor, compilee, &bcIterator);
 
       MJIT_COMPILE_ERROR(code_size, method);
 
@@ -9078,7 +9077,7 @@ TR::CompilationInfoPerThreadBase::mjit(
       // END GENERATE BODY
                     
       // GENERATE COLD AREA
-      code_size = mjit_cg.generateColdArea(cursor, method, jitStackOverflowPatchLocation, peakAllocSize);
+      code_size = mjit_cg.generateColdArea(cursor, method, jitStackOverflowPatchLocation);
 
       MJIT_COMPILE_ERROR(code_size, method);
       buffer_size += code_size;

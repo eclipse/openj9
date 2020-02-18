@@ -10,6 +10,9 @@
 #define MJIT_LINKAGE_INFO_SIZE 4
 #define GENERATE_SWITCH_TO_INTERP_PREPROLOGUE 1
 
+#define BIT_MASK_32 0xffffffff
+#define BIT_MASK_64 0xffffffffffffffff
+
 #define STACKCHECKBUFFER 512
 
 #include <string.h>
@@ -45,8 +48,11 @@ extern "C" int jitStackOverflow();
 
 // Labels linked from templates.
 DECLARE_TEMPLATE(movRSPR10);
+DECLARE_TEMPLATE(movR10R14);
 DECLARE_TEMPLATE(subR10Imm4);
 DECLARE_TEMPLATE(addR10Imm4);
+DECLARE_TEMPLATE(addR14Imm4);
+DECLARE_TEMPLATE(subR14Imm4);
 DECLARE_TEMPLATE(subRSPImm8);
 DECLARE_TEMPLATE(subRSPImm4);
 DECLARE_TEMPLATE(subRSPImm2);
@@ -117,6 +123,18 @@ DECLARE_TEMPLATE(saveXMM4Offset);
 DECLARE_TEMPLATE(saveXMM5Offset);
 DECLARE_TEMPLATE(saveXMM6Offset);
 DECLARE_TEMPLATE(saveXMM7Offset);
+DECLARE_TEMPLATE(saveXMM0Local);
+DECLARE_TEMPLATE(saveXMM1Local);
+DECLARE_TEMPLATE(saveXMM2Local);
+DECLARE_TEMPLATE(saveXMM3Local);
+DECLARE_TEMPLATE(saveXMM4Local);
+DECLARE_TEMPLATE(saveXMM5Local);
+DECLARE_TEMPLATE(saveXMM6Local);
+DECLARE_TEMPLATE(saveXMM7Local);
+DECLARE_TEMPLATE(saveRAXLocal);
+DECLARE_TEMPLATE(saveRSILocal);
+DECLARE_TEMPLATE(saveRDXLocal);
+DECLARE_TEMPLATE(saveRCXLocal);
 DECLARE_TEMPLATE(callByteRel);
 DECLARE_TEMPLATE(call4ByteRel);
 DECLARE_TEMPLATE(jump4ByteRel);
@@ -130,9 +148,8 @@ DECLARE_TEMPLATE(jumpRAX);
 
 // bytecodes
 DECLARE_TEMPLATE(debugBreakpoint);
-DECLARE_TEMPLATE(iLoad0Template);
-DECLARE_TEMPLATE(iLoad1Template);
-DECLARE_TEMPLATE(iLoad2Template);
+DECLARE_TEMPLATE(loadTemplatePrologue);
+DECLARE_TEMPLATE(vLoadTemplate); // Load a value
 DECLARE_TEMPLATE(iAddTemplate);
 DECLARE_TEMPLATE(iSubTemplate);
 DECLARE_TEMPLATE(iMulTemplate);
@@ -447,6 +464,97 @@ lcm(uint32_t a, uint32_t b)
 {
     return a * b / gcd(a, b);
 }
+
+buffer_size_t
+MJIT::CodeGenerator::saveArgsInLocalArray(
+    ParamTable* table,
+    char* buffer,
+    char* typeString
+){
+    buffer_size_t saveSize = 0;
+    U_16 offset = calculateOffset(table);
+    U_16 i = 3;
+    U_16 argSize = 0;
+    U_16 slot = i-3;
+    U_16 slotInc = 1;
+    RealRegister::RegNum regNum = RealRegister::NoReg;
+    while(offset > table->stackSlotsUsed*8){
+        switch(typeString[i]){
+            case BYTE_TYPE_CHARACTER:
+            case CHAR_TYPE_CHARACTER:
+            case INT_TYPE_CHARACTER:
+            case CLASSNAME_TYPE_CHARACTER:
+            case SHORT_TYPE_CHARACTER:
+            case BOOLEAN_TYPE_CHARACTER:
+                regNum = removeParamInt(table, &argSize);
+                slotInc = 1;
+                break;
+            case LONG_TYPE_CHARACTER:
+                regNum = removeParamInt(table, &argSize);
+                slotInc = 2;
+                break;
+            case DOUBLE_TYPE_CHARACTER:
+                regNum = removeParamFloat(table, &argSize);
+                slotInc = 2;
+                break;
+            case FLOAT_TYPE_CHARACTER:
+                regNum = removeParamFloat(table, &argSize);
+                slotInc = 1;
+                break;
+            default:
+                break;
+        }
+        switch(regNum){
+            case RealRegister::xmm0:
+                COPY_TEMPLATE(buffer, saveXMM0Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm1:
+                COPY_TEMPLATE(buffer, saveXMM1Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm2:
+                COPY_TEMPLATE(buffer, saveXMM2Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm3:
+                COPY_TEMPLATE(buffer, saveXMM3Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm4:
+                COPY_TEMPLATE(buffer, saveXMM4Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm5:
+                COPY_TEMPLATE(buffer, saveXMM5Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm6:
+                COPY_TEMPLATE(buffer, saveXMM6Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::xmm7:
+                COPY_TEMPLATE(buffer, saveXMM7Local, saveSize);
+                goto PatchAndBreak;
+            case RealRegister::eax:
+                COPY_TEMPLATE(buffer, saveRAXLocal,  saveSize);
+                goto PatchAndBreak;
+            case RealRegister::esi:
+                COPY_TEMPLATE(buffer, saveRSILocal,  saveSize);
+                goto PatchAndBreak;
+            case RealRegister::edx:
+                COPY_TEMPLATE(buffer, saveRDXLocal,  saveSize);
+                goto PatchAndBreak;
+            case RealRegister::ecx:
+                COPY_TEMPLATE(buffer, saveRCXLocal,  saveSize);
+                goto PatchAndBreak;
+            PatchAndBreak:
+                patchImm4(buffer, (U_32)((slot*8) & BIT_MASK_32));
+                break;
+            case RealRegister::NoReg:
+                break;
+        }
+        i++;
+        slot += slotInc;
+        offset -= argSize;
+    }
+    //TODO Copy values from the stack to the local array here.
+    return saveSize;
+}
+
 buffer_size_t 
 MJIT::CodeGenerator::saveArgsOnStack(
     ParamTable* table,
@@ -481,6 +589,7 @@ MJIT::CodeGenerator::saveArgsOnStack(
             default:
                 break;
         }
+        //TODO This patch8 and isWide setup is suspect. Investigate if this should be patch4 all the time.
         switch(regNum){
             case RealRegister::xmm0:
                 COPY_TEMPLATE(buffer, saveXMM0Offset, saveArgsSize);
@@ -593,6 +702,7 @@ MJIT::CodeGenerator::loadArgsFromStack(
             default:
                 break;
         }
+        //TODO This patch8 and isWide setup is suspect. Investigate if this should be patch4 all the time.
         switch(regNum){
             case RealRegister::xmm0:
                 COPY_TEMPLATE(buffer, loadXMM0Offset, argLoadSize);
@@ -676,6 +786,7 @@ MJIT::CodeGenerator::CodeGenerator(J9MicroJITConfig* config, J9VMThread* thread,
     ,_logFileFP(fp)
     ,_vm(vm)
     ,_codeCache(NULL)
+    ,_stackPeakSize(0)
 {
     _linkage._properties.setOutgoingArgAlignment(lcm(16, _vm.getLocalObjectAlignmentInBytes()));
 }
@@ -857,7 +968,6 @@ MJIT::CodeGenerator::generatePrologue(
     char* buffer, 
     J9Method* method, 
     char** jitStackOverflowJumpPatchLocation,
-    int32_t* peakAllocSize,
     char* magicWordLocation,
     char* first2BytesPatchLocation,
     char** firstInstLocation
@@ -955,6 +1065,7 @@ MJIT::CodeGenerator::generatePrologue(
     uint32_t stackSize = frameSize + properties.getRetAddressWidth();
     uint32_t adjust = align(stackSize, properties.getOutgoingArgAlignment(), _logFileFP) - stackSize;
     auto allocSize = frameSize + adjust;
+    auto localArraySize = romMethod->argCount + romMethod->tempCount;
 
     //return address is allocated by call instruction
 
@@ -977,8 +1088,11 @@ MJIT::CodeGenerator::generatePrologue(
     //auto allocSize = cg()->getFrameSizeInBytes();
 */
     // Here we conservatively assume there is a call in this method that will require space for its return address
-    const int32_t peakSize = allocSize + properties.getPointerSize() + *peakAllocSize;
-    *peakAllocSize = peakSize;
+    _stackPeakSize = 
+        allocSize + //space for stack frame
+        properties.getPointerSize() + //space for return address
+        localArraySize + //Space for local array
+        _stackPeakSize; //space for mjit value stack (set in CompilationInfoPerThreadBase::mjit)
 
     //bool doOverflowCheck = !comp()->isDLT();
 
@@ -996,16 +1110,16 @@ MJIT::CodeGenerator::generatePrologue(
     //
 
     COPY_TEMPLATE(buffer, subRSPImm4, prologueSize);
-    patchImm4(buffer, peakSize);
+    patchImm4(buffer, _stackPeakSize);
 
-    int savePreserveSize = savePreserveRegisters(buffer, peakSize-8);
+    int savePreserveSize = savePreserveRegisters(buffer, _stackPeakSize-8);
     buffer += savePreserveSize;
     prologueSize += savePreserveSize;
 
     error_code = 0;
     table = mapIncomingParms(typeString, maxLength, &error_code);
     if(error_code) return 0;
-    buffer_size_t saveArgSize = saveArgsOnStack(&table, buffer, peakSize, typeString);
+    buffer_size_t saveArgSize = saveArgsOnStack(&table, buffer, _stackPeakSize, typeString);
     buffer += saveArgSize;
     prologueSize += saveArgSize;
 /*
@@ -1260,14 +1374,29 @@ MJIT::CodeGenerator::generatePrologue(
     //CMP ptr to count-for-recompile?
     //JE to epilogue?
 */
+    //Set up MJIT value stack
     COPY_TEMPLATE(buffer, movRSPR10, prologueSize);
     COPY_TEMPLATE(buffer, addR10Imm4, prologueSize);
-    patchImm4(buffer, (U_32)(romMethod->maxStack*8));
+    patchImm4(buffer, (U_32)(romMethod->maxStack*8)); 
+    //TODO: Find a way to cleanly preserve this value before overriding it in the _stackAllocSize
+
+    //Set up MJIT local array
+    COPY_TEMPLATE(buffer, movR10R14, prologueSize);
+    COPY_TEMPLATE(buffer, addR14Imm4, prologueSize);
+    patchImm4(buffer, localArraySize);
+
+    //Copy arguments to the local array
+    table = mapIncomingParms(typeString, maxLength, &error_code);
+    if (error_code) return 0;
+    buffer_size_t saveSize = saveArgsInLocalArray(&table, buffer, typeString);
+    prologueSize += saveSize;
+    if (!saveSize) return 0;
+    
     return prologueSize;
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateEpologue(char* buffer, int32_t peakSize){
+MJIT::CodeGenerator::generateEpologue(char* buffer){
     //TR::RealRegister* espReal = machine()->getRealRegister(TR::RealRegister::esp);
 
     //cursor = cg()->generateDebugCounter(cursor, "cg.epilogues", 1, TR::DebugCounter::Expensive);
@@ -1275,7 +1404,7 @@ MJIT::CodeGenerator::generateEpologue(char* buffer, int32_t peakSize){
     //
     //cursor = restorePreservedRegisters(cursor);
     //24 bytes for the preserved register space
-    int epologueSize = loadPreserveRegisters(buffer, peakSize-8);
+    int epologueSize = loadPreserveRegisters(buffer, _stackPeakSize-8);
     buffer += epologueSize;
     // Deallocate the stack frame
     //
@@ -1291,7 +1420,7 @@ MJIT::CodeGenerator::generateEpologue(char* buffer, int32_t peakSize){
         //}
     //}
     COPY_TEMPLATE(buffer, addRSPImm4, epologueSize);
-    patchImm4(buffer, peakSize);
+    patchImm4(buffer, _stackPeakSize);
 
     //if (cursor->getNext()->getOpCodeValue() == RETImm2) {
     //    toIA32ImmInstruction(cursor->getNext())->setSourceImmediate(comp()->getJittedMethodSymbol()->getNumParameterSlots() << getProperties().getParmSlotShift());
@@ -1300,23 +1429,79 @@ MJIT::CodeGenerator::generateEpologue(char* buffer, int32_t peakSize){
 }
  
 buffer_size_t 
-MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci,  int32_t peakSize){
+MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci){
     buffer_size_t codeGenSize = 0;
     for(TR_J9ByteCode bc = bci->first(); bc != J9BCunknown; bc = bci->next())
     {
         switch(bc) {
             case TR_J9ByteCode::J9BCiload0:
                 trfprintf(_logFileFP, "J9BCiload0\n");
-                COPY_TEMPLATE(buffer, iLoad0Template, codeGenSize);
-                break;
+                goto GenericLoadCall;
             case TR_J9ByteCode::J9BCiload1:
                 trfprintf(_logFileFP, "J9BCiload1\n");
-                COPY_TEMPLATE(buffer, iLoad1Template, codeGenSize);
-                break;
+                goto GenericLoadCall;
             case TR_J9ByteCode::J9BCiload2:
                 trfprintf(_logFileFP, "J9BCiload2\n");
-                COPY_TEMPLATE(buffer, iLoad2Template, codeGenSize);
-                break;    
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCiload3:
+                trfprintf(_logFileFP, "J9BCiload3\n");
+                goto GenericLoadCall;
+		    case TR_J9ByteCode::J9BCiload:
+                trfprintf(_logFileFP, "J9BCiload\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BClload0:
+                trfprintf(_logFileFP, "J9BClload0\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BClload1:
+                trfprintf(_logFileFP, "J9BClload1\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BClload2:
+                trfprintf(_logFileFP, "J9BClload2\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BClload3:
+                trfprintf(_logFileFP, "J9BClload3\n");
+                goto GenericLoadCall;
+		    case TR_J9ByteCode::J9BClload:
+                trfprintf(_logFileFP, "J9BClload\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCfload0:
+                trfprintf(_logFileFP, "J9BCfload0\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCfload1:
+                trfprintf(_logFileFP, "J9BCfload1\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCfload2:
+                trfprintf(_logFileFP, "J9BCfload2\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCfload3:
+                trfprintf(_logFileFP, "J9BCfload3\n");
+                goto GenericLoadCall;
+		    case TR_J9ByteCode::J9BCfload:
+                trfprintf(_logFileFP, "J9BCfload\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCdload0:
+                trfprintf(_logFileFP, "J9BCdload0\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCdload1:
+                trfprintf(_logFileFP, "J9BCdload1\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCdload2:
+                trfprintf(_logFileFP, "J9BCdload2\n");
+                goto GenericLoadCall;
+            case TR_J9ByteCode::J9BCdload3:
+                trfprintf(_logFileFP, "J9BCdload3\n");
+                goto GenericLoadCall;
+		    case TR_J9ByteCode::J9BCdload:
+                trfprintf(_logFileFP, "J9BCdload\n");
+                goto GenericLoadCall;
+            GenericLoadCall:
+                if(buffer_size_t loadSize = generateLoad(buffer, method, bc, bci)){
+                    buffer += loadSize;
+                    codeGenSize += loadSize;
+                } else {
+                    return 0;
+                }
+                break;
             case TR_J9ByteCode::J9BCiadd:
                 trfprintf(_logFileFP, "J9BCiadd\n");
                 COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
@@ -1338,7 +1523,7 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 if(method->returnType() == TR::Int32)
                 {
                     trfprintf(_logFileFP, "Return type : Int32\n"); 
-                    buffer_size_t epilogueSize = generateEpologue(buffer, peakSize);
+                    buffer_size_t epilogueSize = generateEpologue(buffer);
                     buffer += epilogueSize;
                     codeGenSize += epilogueSize;
                     COPY_TEMPLATE(buffer, iReturnTemplate, codeGenSize);                
@@ -1357,11 +1542,60 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateColdArea(char* buffer, J9Method* method, char* jitStackOverflowJumpPatchLocation, int32_t peakSize){
+MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCode bc, TR_J9ByteCodeIterator* bci)
+{
+    char* signature = method->signatureChars();
+    int index = -1;
+    buffer_size_t loadSize = 0;
+    switch(bc) {
+        GenerateTemplate:
+            COPY_TEMPLATE(buffer, loadTemplatePrologue, loadSize);
+            patchImm4(buffer, (U_32)(index*8));
+            break;
+		case TR_J9ByteCode::J9BClload0:
+		case TR_J9ByteCode::J9BCfload0:
+		case TR_J9ByteCode::J9BCdload0:
+        case TR_J9ByteCode::J9BCiload0:
+            index = 0;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClload1:
+        case TR_J9ByteCode::J9BCfload1:
+        case TR_J9ByteCode::J9BCdload1:
+        case TR_J9ByteCode::J9BCiload1:
+            index = 1;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClload2:
+        case TR_J9ByteCode::J9BCfload2:
+        case TR_J9ByteCode::J9BCdload2:
+        case TR_J9ByteCode::J9BCiload2:
+            index = 2;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClload3:
+        case TR_J9ByteCode::J9BCfload3:
+        case TR_J9ByteCode::J9BCdload3:
+        case TR_J9ByteCode::J9BCiload3:
+            index = 3;
+            goto GenerateTemplate;
+		case TR_J9ByteCode::J9BClload:
+		case TR_J9ByteCode::J9BCfload:
+		case TR_J9ByteCode::J9BCdload:
+		case TR_J9ByteCode::J9BCiload:
+            index = bci->nextByte();
+            goto GenerateTemplate;
+		//case TR_J9ByteCode::ALOAD
+		//case TR_J9ByteCode::ALOAD_0
+		//case TR_J9ByteCode::ALOAD_1
+		//case TR_J9ByteCode::ALOAD_2
+		//case TR_J9ByteCode::ALOAD_3
+    }
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateColdArea(char* buffer, J9Method* method, char* jitStackOverflowJumpPatchLocation){
     buffer_size_t coldAreaSize = 0;
     PATCH_RELATIVE_ADDR(jitStackOverflowJumpPatchLocation, jbe4ByteRel, (intptr_t)buffer);
     COPY_TEMPLATE(buffer, movEDIImm32, coldAreaSize);
-    patchImm4(buffer, peakSize);
+    patchImm4(buffer, _stackPeakSize);
 
     COPY_TEMPLATE(buffer, call4ByteRel, coldAreaSize);
     PATCH_RELATIVE_ADDR(buffer, call4ByteRel, (intptr_t)jitStackOverflow);

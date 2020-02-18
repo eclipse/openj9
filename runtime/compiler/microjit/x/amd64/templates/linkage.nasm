@@ -1,350 +1,399 @@
-; add all labels to global list if intending to use in CodeGenerator
-; TODO: Do this with macros so that you can't accidently miss type a label.
-
 %include "utils.nasm"
-
-declare_template movRSPR10
-declare_template subR10Imm4
-declare_template addR10Imm4
-declare_template saveEAXOffset
-declare_template saveESIOffset
-declare_template saveEDXOffset
-declare_template saveECXOffset
-declare_template saveEBXOffset
-declare_template saveEBPOffset
-declare_template saveESPOffset
-declare_template loadEAXOffset
-declare_template loadESIOffset
-declare_template loadEDXOffset
-declare_template loadECXOffset
-declare_template loadEBXOffset
-declare_template loadEBPOffset
-declare_template loadESPOffset
-declare_template je4ByteRel
-declare_template jeByteRel
-declare_template cmpRspRbpDerefOffset
-declare_template saveRAXOffset
-declare_template saveRSIOffset
-declare_template saveRDXOffset
-declare_template saveRCXOffset
-declare_template saveRBXOffset
-declare_template saveRBPOffset
-declare_template saveRSPOffset
-declare_template saveR9Offset
-declare_template saveR10Offset
-declare_template saveR11Offset
-declare_template saveR12Offset
-declare_template saveR13Offset
-declare_template saveR14Offset
-declare_template saveR15Offset
-declare_template saveXMM0Offset
-declare_template saveXMM1Offset
-declare_template saveXMM2Offset
-declare_template saveXMM3Offset
-declare_template saveXMM4Offset
-declare_template saveXMM5Offset
-declare_template saveXMM6Offset
-declare_template saveXMM7Offset
-declare_template loadRAXOffset
-declare_template loadRSIOffset
-declare_template loadRDXOffset
-declare_template loadRCXOffset
-declare_template loadRBXOffset
-declare_template loadRBPOffset
-declare_template loadRSPOffset
-declare_template loadR9Offset
-declare_template loadR10Offset
-declare_template loadR11Offset
-declare_template loadR12Offset
-declare_template loadR13Offset
-declare_template loadR14Offset
-declare_template loadR15Offset
-declare_template loadXMM0Offset
-declare_template loadXMM1Offset
-declare_template loadXMM2Offset
-declare_template loadXMM3Offset
-declare_template loadXMM4Offset
-declare_template loadXMM5Offset
-declare_template loadXMM6Offset
-declare_template loadXMM7Offset
-declare_template callByteRel
-declare_template call4ByteRel
-declare_template jump4ByteRel
-declare_template nopInstruction
-declare_template movRDIImm64
-declare_template movEDIImm32
-declare_template movRAXImm64
-declare_template movEAXImm32
-declare_template jumpRDI
-declare_template jumpRAX
-declare_template jbe4ByteRel
-declare_template subRSPImm8
-declare_template subRSPImm4
-declare_template subRSPImm2
-declare_template subRSPImm1
-declare_template addRSPImm8
-declare_template addRSPImm4
-declare_template addRSPImm2
-declare_template addRSPImm1
 
 ;
 ;Create templates
 ;
 
 section .text
-movRSPR10:
+
+template_start saveXMM0Local
+    movq [r14 + 0xefbeadde], xmm0
+template_end saveXMM0Local
+
+template_start saveXMM1Local
+    movq [r14 + 0xefbeadde], xmm1
+template_end saveXMM1Local
+
+template_start saveXMM2Local
+    movq [r14 + 0xefbeadde], xmm2
+template_end saveXMM2Local
+
+template_start saveXMM3Local
+    movq [r14 + 0xefbeadde], xmm3
+template_end saveXMM3Local
+
+template_start saveXMM4Local
+    movq [r14 + 0xefbeadde], xmm4
+template_end saveXMM4Local
+
+template_start saveXMM5Local
+    movq [r14 + 0xefbeadde], xmm5
+template_end saveXMM5Local
+
+template_start saveXMM6Local
+    movq [r14 + 0xefbeadde], xmm6
+template_end saveXMM6Local
+
+template_start saveXMM7Local
+    movq [r14 + 0xefbeadde], xmm7
+template_end saveXMM7Local
+
+template_start saveRAXLocal
+    mov [r14 + 0xefbeadde], rax
+template_end saveRAXLocal
+
+template_start saveRSILocal
+    mov [r14 + 0xefbeadde], rsi
+template_end saveRSILocal
+
+template_start saveRDXLocal
+    mov [r14 + 0xefbeadde], rdx
+template_end saveRDXLocal
+
+template_start saveRCXLocal
+    mov [r14 + 0xefbeadde], rcx
+template_end saveRCXLocal
+
+template_start movRSPR10
     mov r10, rsp; Used for allocating space on the stack.
-subR10Imm4:
+template_end movRSPR10
+
+template_start movR10R14
+    mov r14, r10; Used for allocating space on the stack.
+template_end movR10R14
+
+template_start subR10Imm4
     sub r10, 0x7fffffff; Used for allocating space on the stack.
-addR10Imm4:
+template_end subR10Imm4
+
+template_start addR10Imm4
     add r10, 0x7fffffff; Used for allocating space on the stack.
-saveRBPOffset:
+template_end addR10Imm4
+
+template_start subR14Imm4
+    sub r14, 0x7fffffff; Used for allocating space on the stack.
+template_end subR14Imm4
+
+template_start addR14Imm4
+    add r14, 0x7fffffff; Used for allocating space on the stack.
+template_end addR14Imm4
+
+template_start saveRBPOffset
     mov [rsp+0xff], rbp; Used ff as all other labels look valid and 255 will be rare.
-saveEBPOffset:
+template_end saveRBPOffset
+
+template_start saveEBPOffset
     mov [rsp+0xff], ebp; Used ff as all other labels look valid and 255 will be rare.
-saveRSPOffset:
-saveESPOffset:
+template_end saveEBPOffset
+
+template_start saveRSPOffset
     mov [rsp+0xff], rsp; Used ff as all other labels look valid and 255 will be rare.
-loadRBPOffset:
+template_end saveRSPOffset
+
+template_start saveESPOffset
+    mov [rsp+0xff], rsp; Used ff as all other labels look valid and 255 will be rare.
+template_end saveESPOffset
+
+template_start loadRBPOffset
     mov rbp, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadEBPOffset:
+template_end loadRBPOffset
+
+template_start loadEBPOffset
     mov ebp, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRSPOffset:
-loadESPOffset:
+template_end loadEBPOffset
+
+template_start loadRSPOffset
     mov rsp, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-saveEAXOffset:
+template_end loadRSPOffset
+
+template_start loadESPOffset
+    mov rsp, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
+template_end loadESPOffset
+
+template_start saveEAXOffset
     mov [rsp+0xff], eax; Used ff as all other labels look valid and 255 will be rare.
-saveESIOffset:
+template_end saveEAXOffset
+
+template_start saveESIOffset
     mov [rsp+0xff], esi; Used ff as all other labels look valid and 255 will be rare.
-saveEDXOffset:
+template_end saveESIOffset
+
+template_start saveEDXOffset
     mov [rsp+0xff], edx; Used ff as all other labels look valid and 255 will be rare.
-saveECXOffset:
+template_end saveEDXOffset
+
+template_start saveECXOffset
     mov [rsp+0xff], ecx; Used ff as all other labels look valid and 255 will be rare.
-saveEBXOffset:
+template_end saveECXOffset
+
+template_start saveEBXOffset
     mov [rsp+0xff], ebx; Used ff as all other labels look valid and 255 will be rare.
-loadEAXOffset:
+template_end saveEBXOffset
+
+template_start loadEAXOffset
     mov eax, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadESIOffset:
+template_end loadEAXOffset
+
+template_start loadESIOffset
     mov esi, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadEDXOffset:
+template_end loadESIOffset
+
+template_start loadEDXOffset
     mov edx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadECXOffset:
+template_end loadEDXOffset
+
+template_start loadECXOffset
     mov ecx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadEBXOffset:
+template_end loadECXOffset
+
+template_start loadEBXOffset
     mov ebx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-addRSPImm8:
+template_end loadEBXOffset
+
+template_start addRSPImm8
     add rsp, 0x7fffffffffffffff; Used for allocating space on the stack.
-addRSPImm4:
+template_end addRSPImm8
+
+template_start addRSPImm4
     add rsp, 0x7fffffff; Used for allocating space on the stack.
-addRSPImm2:
+template_end addRSPImm4
+
+template_start addRSPImm2
     add rsp, 0x7fff; Used for allocating space on the stack.
-addRSPImm1:
+template_end addRSPImm2
+
+template_start addRSPImm1
     add rsp, 0x7f; Used for allocating space on the stack.
-je4ByteRel:
+template_end addRSPImm1
+
+template_start je4ByteRel
     je 0xff;
-jeByteRel:
+template_end je4ByteRel
+
+template_start jeByteRel
     je 0xff;
-subRSPImm8:
+template_end jeByteRel
+
+template_start subRSPImm8
     sub rsp, 0x7fffffffffffffff; Used for allocating space on the stack.
-subRSPImm4:
+template_end subRSPImm8
+
+template_start subRSPImm4
     sub rsp, 0x7fffffff; Used for allocating space on the stack.
-subRSPImm2:
+template_end subRSPImm4
+
+template_start subRSPImm2
     sub rsp, 0x7fff; Used for allocating space on the stack.
-subRSPImm1:
+template_end subRSPImm2
+
+template_start subRSPImm1
     sub rsp, 0x7f; Used for allocating space on the stack.
-jbe4ByteRel:
+template_end subRSPImm1
+
+template_start jbe4ByteRel
     jbe 0xefbeadde; Used for generating jumps to far labels.
-cmpRspRbpDerefOffset:
+template_end jbe4ByteRel
+
+template_start cmpRspRbpDerefOffset
     cmp rsp, [rbp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRAXOffset:
+template_end cmpRspRbpDerefOffset
+
+template_start loadRAXOffset
     mov rax, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRSIOffset:
+template_end loadRAXOffset
+
+template_start loadRSIOffset
     mov rsi, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRDXOffset:
+template_end loadRSIOffset
+
+template_start loadRDXOffset
     mov rdx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRCXOffset:
+template_end loadRDXOffset
+
+template_start loadRCXOffset
     mov rcx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadRBXOffset:
+template_end loadRCXOffset
+
+template_start loadRBXOffset
     mov rbx, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR9Offset:
+template_end loadRBXOffset
+
+template_start loadR9Offset
     mov r9, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR10Offset:
+template_end loadR9Offset
+
+template_start loadR10Offset
     mov r10, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR11Offset:
+template_end loadR10Offset
+
+template_start loadR11Offset
     mov r11, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR12Offset:
+template_end loadR11Offset
+
+template_start loadR12Offset
     mov r12, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR13Offset:
+template_end loadR12Offset
+
+template_start loadR13Offset
     mov r13, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR14Offset:
+template_end loadR13Offset
+
+template_start loadR14Offset
     mov r14, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadR15Offset:
+template_end loadR14Offset
+
+template_start loadR15Offset
     mov r15, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM0Offset:
+template_end loadR15Offset
+
+template_start loadXMM0Offset
     movq xmm0, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM1Offset:
+template_end loadXMM0Offset
+
+template_start loadXMM1Offset
     movq xmm1, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM2Offset:
+template_end loadXMM1Offset
+
+template_start loadXMM2Offset
     movq xmm2, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM3Offset:
+template_end loadXMM2Offset
+
+template_start loadXMM3Offset
     movq xmm3, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM4Offset:
+template_end loadXMM3Offset
+
+template_start loadXMM4Offset
     movq xmm4, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM5Offset:
+template_end loadXMM4Offset
+
+template_start loadXMM5Offset
     movq xmm5, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM6Offset:
+template_end loadXMM5Offset
+
+template_start loadXMM6Offset
     movq xmm6, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-loadXMM7Offset:
+template_end loadXMM6Offset
+
+template_start loadXMM7Offset
     movq xmm7, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
-saveRAXOffset:
+template_end loadXMM7Offset
+
+template_start saveRAXOffset
     mov [rsp+0xff], rax; Used ff as all other labels look valid and 255 will be rare.
-saveRSIOffset:
+template_end saveRAXOffset
+
+template_start saveRSIOffset
     mov [rsp+0xff], rsi; Used ff as all other labels look valid and 255 will be rare.
-saveRDXOffset:
+template_end saveRSIOffset
+
+template_start saveRDXOffset
     mov [rsp+0xff], rdx; Used ff as all other labels look valid and 255 will be rare.
-saveRCXOffset:
+template_end saveRDXOffset
+
+template_start saveRCXOffset
     mov [rsp+0xff], rcx; Used ff as all other labels look valid and 255 will be rare.
-saveRBXOffset:
+template_end saveRCXOffset
+
+template_start saveRBXOffset
     mov [rsp+0xff], rbx; Used ff as all other labels look valid and 255 will be rare.
-saveR9Offset:
+template_end saveRBXOffset
+
+template_start saveR9Offset
     mov [rsp+0xff], r9; Used ff as all other labels look valid and 255 will be rare.
-saveR10Offset:
+template_end saveR9Offset
+
+template_start saveR10Offset
     mov [rsp+0xff], r10; Used ff as all other labels look valid and 255 will be rare.
-saveR11Offset:
+template_end saveR10Offset
+
+template_start saveR11Offset
     mov [rsp+0xff], r11; Used ff as all other labels look valid and 255 will be rare.
-saveR12Offset:
+template_end saveR11Offset
+
+template_start saveR12Offset
     mov [rsp+0xff], r12; Used ff as all other labels look valid and 255 will be rare.
-saveR13Offset:
+template_end saveR12Offset
+
+template_start saveR13Offset
     mov [rsp+0xff], r13; Used ff as all other labels look valid and 255 will be rare.
-saveR14Offset:
+template_end saveR13Offset
+
+template_start saveR14Offset
     mov [rsp+0xff], r14; Used ff as all other labels look valid and 255 will be rare.
-saveR15Offset:
+template_end saveR14Offset
+
+template_start saveR15Offset
     mov [rsp+0xff], r15; Used ff as all other labels look valid and 255 will be rare.
-saveXMM0Offset:
+template_end saveR15Offset
+
+template_start saveXMM0Offset
     movq [rsp+0xff], xmm0; Used ff as all other labels look valid and 255 will be rare.
-saveXMM1Offset:
+template_end saveXMM0Offset
+
+template_start saveXMM1Offset
     movq [rsp+0xff], xmm1; Used ff as all other labels look valid and 255 will be rare.
-saveXMM2Offset:
+template_end saveXMM1Offset
+
+template_start saveXMM2Offset
     movq [rsp+0xff], xmm2; Used ff as all other labels look valid and 255 will be rare.
-saveXMM3Offset:
+template_end saveXMM2Offset
+
+template_start saveXMM3Offset
     movq [rsp+0xff], xmm3; Used ff as all other labels look valid and 255 will be rare.
-saveXMM4Offset:
+template_end saveXMM3Offset
+
+template_start saveXMM4Offset
     movq [rsp+0xff], xmm4; Used ff as all other labels look valid and 255 will be rare.
-saveXMM5Offset:
+template_end saveXMM4Offset
+
+template_start saveXMM5Offset
     movq [rsp+0xff], xmm5; Used ff as all other labels look valid and 255 will be rare.
-saveXMM6Offset:
+template_end saveXMM5Offset
+
+template_start saveXMM6Offset
     movq [rsp+0xff], xmm6; Used ff as all other labels look valid and 255 will be rare.
-saveXMM7Offset:
+template_end saveXMM6Offset
+
+template_start saveXMM7Offset
     movq [rsp+0xff], xmm7; Used ff as all other labels look valid and 255 will be rare.
-call4ByteRel:
+template_end saveXMM7Offset
+
+template_start call4ByteRel
     call 0xefbeadde; Used for generating jumps to far labels.
-callByteRel:
+template_end call4ByteRel
+
+template_start callByteRel
     call 0xff; Used for generating jumps to nearby labels. Used ff as all other labels look valid and 255 will be rare.
-jump4ByteRel:
+template_end callByteRel
+
+template_start jump4ByteRel
     jmp 0xefbeadde; Used for generating jumps to far labels.
-nopInstruction:
+template_end jump4ByteRel
+
+template_start nopInstruction
     nop; Used for alignment. One byte wide 
-movRDIImm64:
+template_end nopInstruction
+
+template_start movRDIImm64
     mov rdi, 0xefbeaddeefbeadde; looks like 'deadbeef' in objdump
-movEDIImm32:
+template_end movRDIImm64
+
+template_start movEDIImm32
     mov edi, 0xefbeadde; looks like 'deadbeef' in objdump
-movRAXImm64:
+template_end movEDIImm32
+
+template_start movRAXImm64
     mov rax, 0xefbeaddeefbeadde; looks like 'deadbeef' in objdump
-movEAXImm32:
+template_end movRAXImm64
+
+template_start movEAXImm32
     mov eax, 0xefbeadde; looks like 'deadbeef' in objdump
-jumpRDI:
+template_end movEAXImm32
+
+template_start jumpRDI
     jmp rdi; Useful for jumping to absolute addresses. Store in RDI then generate this.
-jumpRAX:
+template_end jumpRDI
+
+template_start jumpRAX
     jmp rax; Useful for jumping to absolute addresses. Store in RAX then generate this.
-lastLabel:
-
-;
-;Calculate the size of all templates
-;
-
-section .data
-;TODO: change convention to support creation of a macro to automate this
-
-movRSPR10Size:              dw subR10Imm4           - movRSPR10
-subR10Imm4Size:             dw addR10Imm4           - subR10Imm4
-addR10Imm4Size:             dw saveRBPOffset        - addR10Imm4
-saveRBPOffsetSize:          dw saveEBPOffset        - saveRBPOffset
-saveEBPOffsetSize:          dw saveRSPOffset        - saveEBPOffset
-saveRSPOffsetSize:          dw loadRBPOffset        - saveRSPOffset
-saveESPOffsetSize:          dw loadRBPOffset        - saveESPOffset
-loadRBPOffsetSize:          dw loadEBPOffset        - loadRBPOffset
-loadEBPOffsetSize:          dw loadESPOffset        - loadEBPOffset
-loadRSPOffsetSize:          dw saveEAXOffset        - loadRSPOffset
-loadESPOffsetSize:          dw saveEAXOffset        - loadESPOffset
-saveEAXOffsetSize:          dw saveESIOffset        - saveEAXOffset
-saveESIOffsetSize:          dw saveEDXOffset        - saveESIOffset
-saveEDXOffsetSize:          dw saveECXOffset        - saveEDXOffset
-saveECXOffsetSize:          dw saveEBXOffset        - saveECXOffset
-saveEBXOffsetSize:          dw loadEAXOffset        - saveEBXOffset
-loadEAXOffsetSize:          dw loadESIOffset        - loadEAXOffset
-loadESIOffsetSize:          dw loadEDXOffset        - loadESIOffset
-loadEDXOffsetSize:          dw loadECXOffset        - loadEDXOffset
-loadECXOffsetSize:          dw loadEBXOffset        - loadECXOffset
-loadEBXOffsetSize:          dw addRSPImm8           - loadEBXOffset
-addRSPImm8Size:             dw addRSPImm4           - addRSPImm8
-addRSPImm4Size:             dw addRSPImm2           - addRSPImm4
-addRSPImm2Size:             dw addRSPImm1           - addRSPImm2
-addRSPImm1Size:             dw je4ByteRel           - addRSPImm1
-je4ByteRelSize:             dw jeByteRel            - je4ByteRel
-jeByteRelSize:              dw subRSPImm8           - jeByteRel
-subRSPImm8Size:             dw subRSPImm4           - subRSPImm8
-subRSPImm4Size:             dw subRSPImm2           - subRSPImm4
-subRSPImm2Size:             dw subRSPImm1           - subRSPImm2
-subRSPImm1Size:             dw jbe4ByteRel          - subRSPImm1
-jbe4ByteRelSize:            dw cmpRspRbpDerefOffset - jbe4ByteRel
-cmpRspRbpDerefOffsetSize:   dw loadRAXOffset        - cmpRspRbpDerefOffset
-loadRAXOffsetSize:          dw loadRSIOffset        - loadRAXOffset
-loadRSIOffsetSize:          dw loadRDXOffset        - loadRSIOffset
-loadRDXOffsetSize:          dw loadRCXOffset        - loadRDXOffset
-loadRCXOffsetSize:          dw loadRBXOffset        - loadRCXOffset
-loadRBXOffsetSize:          dw loadR9Offset         - loadRBXOffset
-loadR9OffsetSize:           dw loadR10Offset        - loadR9Offset
-loadR10OffsetSize:          dw loadR11Offset        - loadR10Offset
-loadR11OffsetSize:          dw loadR12Offset        - loadR11Offset
-loadR12OffsetSize:          dw loadR13Offset        - loadR12Offset
-loadR13OffsetSize:          dw loadR14Offset        - loadR13Offset
-loadR14OffsetSize:          dw loadR15Offset        - loadR14Offset
-loadR15OffsetSize:          dw loadXMM0Offset       - loadR15Offset
-loadXMM0OffsetSize:         dw loadXMM1Offset       - loadXMM0Offset
-loadXMM1OffsetSize:         dw loadXMM2Offset       - loadXMM1Offset
-loadXMM2OffsetSize:         dw loadXMM3Offset       - loadXMM2Offset
-loadXMM3OffsetSize:         dw loadXMM4Offset       - loadXMM3Offset
-loadXMM4OffsetSize:         dw loadXMM5Offset       - loadXMM4Offset
-loadXMM5OffsetSize:         dw loadXMM6Offset       - loadXMM5Offset
-loadXMM6OffsetSize:         dw loadXMM7Offset       - loadXMM6Offset
-loadXMM7OffsetSize:         dw saveRAXOffset        - loadXMM7Offset
-saveRAXOffsetSize:          dw saveRSIOffset        - saveRAXOffset
-saveRSIOffsetSize:          dw saveRDXOffset        - saveRSIOffset
-saveRDXOffsetSize:          dw saveRCXOffset        - saveRDXOffset
-saveRCXOffsetSize:          dw saveRBXOffset        - saveRCXOffset
-saveRBXOffsetSize:          dw saveR9Offset         - saveRBXOffset
-saveR9OffsetSize:           dw saveR10Offset        - saveR9Offset
-saveR10OffsetSize:          dw saveR11Offset        - saveR10Offset
-saveR11OffsetSize:          dw saveR12Offset        - saveR11Offset
-saveR12OffsetSize:          dw saveR13Offset        - saveR12Offset
-saveR13OffsetSize:          dw saveR14Offset        - saveR13Offset
-saveR14OffsetSize:          dw saveR15Offset        - saveR14Offset
-saveR15OffsetSize:          dw saveXMM0Offset       - saveR15Offset
-saveXMM0OffsetSize:         dw saveXMM1Offset       - saveXMM0Offset
-saveXMM1OffsetSize:         dw saveXMM2Offset       - saveXMM1Offset
-saveXMM2OffsetSize:         dw saveXMM3Offset       - saveXMM2Offset
-saveXMM3OffsetSize:         dw saveXMM4Offset       - saveXMM3Offset
-saveXMM4OffsetSize:         dw saveXMM5Offset       - saveXMM4Offset
-saveXMM5OffsetSize:         dw saveXMM6Offset       - saveXMM5Offset
-saveXMM6OffsetSize:         dw saveXMM7Offset       - saveXMM6Offset
-saveXMM7OffsetSize:         dw call4ByteRel         - saveXMM7Offset
-call4ByteRelSize:           dw callByteRel          - call4ByteRel
-callByteRelSize:            dw jump4ByteRel         - callByteRel
-jump4ByteRelSize:           dw nopInstruction       - jump4ByteRel
-nopInstructionSize:         dw movRDIImm64          - nopInstruction
-movRDIImm64Size:            dw movEDIImm32          - movRDIImm64
-movEDIImm32Size:            dw movRAXImm64          - movEDIImm32
-movRAXImm64Size:            dw movEAXImm32          - movRAXImm64
-movEAXImm32Size:            dw jumpRDI              - movEAXImm32
-jumpRDISize:                dw jumpRAX              - jumpRDI
-jumpRAXSize:                dw lastLabel            - jumpRAX
+template_end jumpRAX

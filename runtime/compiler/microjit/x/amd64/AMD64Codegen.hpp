@@ -220,18 +220,99 @@ class CodeGenerator {
         TR::FilePointer *_logFileFP;
         TR_J9VMBase& _vm;
         TR::CodeCache *_codeCache;
+        int32_t _stackPeakSize;
         ParamTable mapIncomingParms(char*, U_16, int*);
-        buffer_size_t generateSwitchToInterpPrePrologue(char*, J9Method*, buffer_size_t, buffer_size_t, char*, U_16);
-        buffer_size_t generateEpologue(char*, int32_t);
-        buffer_size_t loadArgsFromStack(ParamTable*, char*, buffer_size_t, char*);
-        buffer_size_t saveArgsOnStack(ParamTable*, char*, buffer_size_t, char*);
+
+        buffer_size_t generateSwitchToInterpPrePrologue(
+            char*,
+            J9Method*,
+            buffer_size_t,
+            buffer_size_t,
+            char*,
+            U_16
+        );
+
+        buffer_size_t generateEpologue(char*);
+
+        buffer_size_t loadArgsFromStack(
+            ParamTable*,
+            char*,
+            buffer_size_t,
+            char*
+        );
+
+        buffer_size_t saveArgsOnStack(
+            ParamTable*,
+            char*,
+            buffer_size_t,
+            char*
+        );
+
+        buffer_size_t
+        saveArgsInLocalArray(
+            ParamTable*,
+            char*,
+            char*
+        );
+        
+        /**
+         * Generates a load instruction based on the type.
+         * 
+         * @param buffer         code buffer
+         * @param method         method for introspection
+         * @param bc             Bytecode that generated the load instruction
+         * @return               size of generated code; 0 if method failed
+         */
+        buffer_size_t
+        generateLoad(
+            char* buffer,
+            TR_ResolvedMethod* method,
+            TR_J9ByteCode bc,
+            TR_J9ByteCodeIterator* bci
+        );
+
     public:
         CodeGenerator() = delete;
         CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&);
 
-        buffer_size_t generatePrePrologue(char*, J9Method*, char**, char**, TR_PersistentJittedBodyInfo**);
-        buffer_size_t generatePrologue(char*, J9Method*, char**, int32_t*, char*, char*, char**);
-        buffer_size_t generateColdArea(char*, J9Method*, char*, int32_t);
+        inline void 
+        setPeakStackSize(int32_t newSize)
+        {
+            _stackPeakSize = newSize;
+        }
+
+        inline int32_t 
+        getPeakStackSize()
+        {
+            return _stackPeakSize;
+        }
+
+        buffer_size_t 
+        generatePrePrologue(
+            char*,
+            J9Method*,
+            char**,
+            char**,
+            TR_PersistentJittedBodyInfo**
+        );
+
+        buffer_size_t 
+        generatePrologue(
+            char*,
+            J9Method*,
+            char**,
+            char*,
+            char*,
+            char**
+        );
+
+        buffer_size_t 
+        generateColdArea(
+            char*,
+            J9Method*,
+            char*
+        );
+
         /**
          * Generates the body for a method.
          * 
@@ -240,13 +321,19 @@ class CodeGenerator {
          * @param method         method for introspection
          * @return               size of generated code; 0 if method failed
          */
-        buffer_size_t generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci, int32_t);
+        buffer_size_t 
+        generateBody(
+            char* buffer,
+            TR_ResolvedMethod* method,
+            TR_J9ByteCodeIterator* bci
+        );
 
         /**
          * Generate an int3 for signaling debug breakpoint for Linux x86
          * @param buffer    code buffer
          */
-        buffer_size_t generateDebugBreakpoint(char* buffer);
+        buffer_size_t 
+        generateDebugBreakpoint(char* buffer);
         
         /**
          * Allocate space in the code cache of size length and 
@@ -259,7 +346,12 @@ class CodeGenerator {
          * @param vmBase    To check if compilation should be interrupted
          * @param vmThread  Thread Id is stored in cache
          */
-        U_8 * allocateCodeCache(int32_t length, TR_J9VMBase *vmBase, J9VMThread *vmThread);
+        U_8 * 
+        allocateCodeCache(
+            int32_t length,
+            TR_J9VMBase *vmBase,
+            J9VMThread *vmThread
+        );
 };
 
 } //namespace MJIT
