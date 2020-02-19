@@ -1065,7 +1065,7 @@ MJIT::CodeGenerator::generatePrologue(
     uint32_t stackSize = frameSize + properties.getRetAddressWidth();
     uint32_t adjust = align(stackSize, properties.getOutgoingArgAlignment(), _logFileFP) - stackSize;
     auto allocSize = frameSize + adjust;
-    auto localArraySize = romMethod->argCount + romMethod->tempCount;
+    auto localArraySize = (romMethod->argCount + romMethod->tempCount)*8;
 
     //return address is allocated by call instruction
 
@@ -1382,8 +1382,6 @@ MJIT::CodeGenerator::generatePrologue(
 
     //Set up MJIT local array
     COPY_TEMPLATE(buffer, movR10R14, prologueSize);
-    COPY_TEMPLATE(buffer, addR14Imm4, prologueSize);
-    patchImm4(buffer, localArraySize);
 
     //Copy arguments to the local array
     table = mapIncomingParms(typeString, maxLength, &error_code);
@@ -1551,6 +1549,7 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
         GenerateTemplate:
             COPY_TEMPLATE(buffer, loadTemplatePrologue, loadSize);
             patchImm4(buffer, (U_32)(index*8));
+            COPY_TEMPLATE(buffer, vLoadTemplate, loadSize);
             break;
 		case TR_J9ByteCode::J9BClload0:
 		case TR_J9ByteCode::J9BCfload0:
@@ -1588,6 +1587,7 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
 		//case TR_J9ByteCode::ALOAD_2
 		//case TR_J9ByteCode::ALOAD_3
     }
+    return loadSize;
 }
 
 buffer_size_t
