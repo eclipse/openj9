@@ -150,6 +150,8 @@ DECLARE_TEMPLATE(jumpRAX);
 DECLARE_TEMPLATE(debugBreakpoint);
 DECLARE_TEMPLATE(loadTemplatePrologue);
 DECLARE_TEMPLATE(vLoadTemplate); // Load a value
+DECLARE_TEMPLATE(vStoreTemplatePrologue); // Store a value
+DECLARE_TEMPLATE(storeTemplate);
 DECLARE_TEMPLATE(iAddTemplate);
 DECLARE_TEMPLATE(iSubTemplate);
 DECLARE_TEMPLATE(iMulTemplate);
@@ -1425,6 +1427,18 @@ MJIT::CodeGenerator::generateEpologue(char* buffer){
     //}
     return epologueSize;
 }
+
+// Macros to clean up the switch case for generate body
+#define loadCasePrologue(byteCodeCaseType)\
+case TR_J9ByteCode::byteCodeCaseType
+#define loadCaseBody(byteCodeCaseType)\
+    trfprintf(_logFileFP, #byteCodeCaseType "\n");\
+    goto GenericLoadCall
+#define storeCasePrologue(byteCodeCaseType)\
+case TR_J9ByteCode::byteCodeCaseType
+#define storeCaseBody(byteCodeCaseType)\
+    trfprintf(_logFileFP, #byteCodeCaseType "\n");\
+    goto GenericStoreCall
  
 buffer_size_t 
 MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci){
@@ -1432,68 +1446,96 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
     for(TR_J9ByteCode bc = bci->first(); bc != J9BCunknown; bc = bci->next())
     {
         switch(bc) {
-            case TR_J9ByteCode::J9BCiload0:
-                trfprintf(_logFileFP, "J9BCiload0\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCiload1:
-                trfprintf(_logFileFP, "J9BCiload1\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCiload2:
-                trfprintf(_logFileFP, "J9BCiload2\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCiload3:
-                trfprintf(_logFileFP, "J9BCiload3\n");
-                goto GenericLoadCall;
-		    case TR_J9ByteCode::J9BCiload:
-                trfprintf(_logFileFP, "J9BCiload\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BClload0:
-                trfprintf(_logFileFP, "J9BClload0\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BClload1:
-                trfprintf(_logFileFP, "J9BClload1\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BClload2:
-                trfprintf(_logFileFP, "J9BClload2\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BClload3:
-                trfprintf(_logFileFP, "J9BClload3\n");
-                goto GenericLoadCall;
-		    case TR_J9ByteCode::J9BClload:
-                trfprintf(_logFileFP, "J9BClload\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCfload0:
-                trfprintf(_logFileFP, "J9BCfload0\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCfload1:
-                trfprintf(_logFileFP, "J9BCfload1\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCfload2:
-                trfprintf(_logFileFP, "J9BCfload2\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCfload3:
-                trfprintf(_logFileFP, "J9BCfload3\n");
-                goto GenericLoadCall;
-		    case TR_J9ByteCode::J9BCfload:
-                trfprintf(_logFileFP, "J9BCfload\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCdload0:
-                trfprintf(_logFileFP, "J9BCdload0\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCdload1:
-                trfprintf(_logFileFP, "J9BCdload1\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCdload2:
-                trfprintf(_logFileFP, "J9BCdload2\n");
-                goto GenericLoadCall;
-            case TR_J9ByteCode::J9BCdload3:
-                trfprintf(_logFileFP, "J9BCdload3\n");
-                goto GenericLoadCall;
-		    case TR_J9ByteCode::J9BCdload:
-                trfprintf(_logFileFP, "J9BCdload\n");
-                goto GenericLoadCall;
+            loadCasePrologue(J9BCiload0):
+            loadCaseBody(J9BCiload0);
+            loadCasePrologue(J9BCiload1):
+            loadCaseBody(J9BCiload1);
+            loadCasePrologue(J9BCiload2):
+            loadCaseBody(J9BCiload2);
+            loadCasePrologue(J9BCiload3):
+            loadCaseBody(J9BCiload3);
+		    loadCasePrologue(J9BCiload):
+		    loadCaseBody(J9BCiload);
+            loadCasePrologue(J9BClload0):
+            loadCaseBody(J9BClload0);
+            loadCasePrologue(J9BClload1):
+            loadCaseBody(J9BClload1);
+            loadCasePrologue(J9BClload2):
+            loadCaseBody(J9BClload2);
+            loadCasePrologue(J9BClload3):
+            loadCaseBody(J9BClload3);
+		    loadCasePrologue(J9BClload):
+		    loadCaseBody(J9BClload);
+            loadCasePrologue(J9BCfload0):
+            loadCaseBody(J9BCfload0);
+            loadCasePrologue(J9BCfload1):
+            loadCaseBody(J9BCfload1);
+            loadCasePrologue(J9BCfload2):
+            loadCaseBody(J9BCfload2);
+            loadCasePrologue(J9BCfload3):
+            loadCaseBody(J9BCfload3);
+		    loadCasePrologue(J9BCfload):
+		    loadCaseBody(J9BCfload);
+            loadCasePrologue(J9BCdload0):
+            loadCaseBody(J9BCdload0);
+            loadCasePrologue(J9BCdload1):
+            loadCaseBody(J9BCdload1);
+            loadCasePrologue(J9BCdload2):
+            loadCaseBody(J9BCdload2);
+            loadCasePrologue(J9BCdload3):
+            loadCaseBody(J9BCdload3);
+		    loadCasePrologue(J9BCdload):
+		    loadCaseBody(J9BCdload);
             GenericLoadCall:
                 if(buffer_size_t loadSize = generateLoad(buffer, method, bc, bci)){
+                    buffer += loadSize;
+                    codeGenSize += loadSize;
+                } else {
+                    return 0;
+                }
+                break;
+            storeCasePrologue(J9BCistore0):
+            storeCaseBody(J9BCistore0);
+            storeCasePrologue(J9BCistore1):
+            storeCaseBody(J9BCistore1);
+            storeCasePrologue(J9BCistore2):
+            storeCaseBody(J9BCistore2);
+            storeCasePrologue(J9BCistore3):
+            storeCaseBody(J9BCistore3);
+		    storeCasePrologue(J9BCistore):
+		    storeCaseBody(J9BCistore);
+            storeCasePrologue(J9BClstore0):
+            storeCaseBody(J9BClstore0);
+            storeCasePrologue(J9BClstore1):
+            storeCaseBody(J9BClstore1);
+            storeCasePrologue(J9BClstore2):
+            storeCaseBody(J9BClstore2);
+            storeCasePrologue(J9BClstore3):
+            storeCaseBody(J9BClstore3);
+		    storeCasePrologue(J9BClstore):
+		    storeCaseBody(J9BClstore);
+            storeCasePrologue(J9BCfstore0):
+            storeCaseBody(J9BCfstore0);
+            storeCasePrologue(J9BCfstore1):
+            storeCaseBody(J9BCfstore1);
+            storeCasePrologue(J9BCfstore2):
+            storeCaseBody(J9BCfstore2);
+            storeCasePrologue(J9BCfstore3):
+            storeCaseBody(J9BCfstore3);
+		    storeCasePrologue(J9BCfstore):
+		    storeCaseBody(J9BCfstore);
+            storeCasePrologue(J9BCdstore0):
+            storeCaseBody(J9BCdstore0);
+            storeCasePrologue(J9BCdstore1):
+            storeCaseBody(J9BCdstore1);
+            storeCasePrologue(J9BCdstore2):
+            storeCaseBody(J9BCdstore2);
+            storeCasePrologue(J9BCdstore3):
+            storeCaseBody(J9BCdstore3);
+		    storeCasePrologue(J9BCdstore):
+		    storeCaseBody(J9BCdstore);
+            GenericStoreCall:
+                if(buffer_size_t loadSize = generateStore(buffer, method, bc, bci)){
                     buffer += loadSize;
                     codeGenSize += loadSize;
                 } else {
@@ -1588,6 +1630,57 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
 		//case TR_J9ByteCode::ALOAD_3
     }
     return loadSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCode bc, TR_J9ByteCodeIterator* bci)
+{
+    char* signature = method->signatureChars();
+    int index = -1;
+    buffer_size_t storeSize = 0;
+    switch(bc) {
+        GenerateTemplate:
+            COPY_TEMPLATE(buffer, vStoreTemplatePrologue, storeSize);
+            COPY_TEMPLATE(buffer, storeTemplate, storeSize);
+            patchImm4(buffer, (U_32)(index*8));
+            break;
+		case TR_J9ByteCode::J9BClstore0:
+		case TR_J9ByteCode::J9BCfstore0:
+		case TR_J9ByteCode::J9BCdstore0:
+        case TR_J9ByteCode::J9BCistore0:
+            index = 0;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClstore1:
+        case TR_J9ByteCode::J9BCfstore1:
+        case TR_J9ByteCode::J9BCdstore1:
+        case TR_J9ByteCode::J9BCistore1:
+            index = 1;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClstore2:
+        case TR_J9ByteCode::J9BCfstore2:
+        case TR_J9ByteCode::J9BCdstore2:
+        case TR_J9ByteCode::J9BCistore2:
+            index = 2;
+            goto GenerateTemplate;
+        case TR_J9ByteCode::J9BClstore3:
+        case TR_J9ByteCode::J9BCfstore3:
+        case TR_J9ByteCode::J9BCdstore3:
+        case TR_J9ByteCode::J9BCistore3:
+            index = 3;
+            goto GenerateTemplate;
+		case TR_J9ByteCode::J9BClstore:
+		case TR_J9ByteCode::J9BCfstore:
+		case TR_J9ByteCode::J9BCdstore:
+		case TR_J9ByteCode::J9BCistore:
+            index = bci->nextByte();
+            goto GenerateTemplate;
+		//case TR_J9ByteCode::ALOAD
+		//case TR_J9ByteCode::ALOAD_0
+		//case TR_J9ByteCode::ALOAD_1
+		//case TR_J9ByteCode::ALOAD_2
+		//case TR_J9ByteCode::ALOAD_3
+    }
+    return storeSize;
 }
 
 buffer_size_t

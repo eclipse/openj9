@@ -254,10 +254,10 @@ class CodeGenerator {
             char*,
             char*
         );
-        
+
         /**
          * Generates a load instruction based on the type.
-         * 
+         *
          * @param buffer         code buffer
          * @param method         method for introspection
          * @param bc             Bytecode that generated the load instruction
@@ -265,6 +265,22 @@ class CodeGenerator {
          */
         buffer_size_t
         generateLoad(
+            char* buffer,
+            TR_ResolvedMethod* method,
+            TR_J9ByteCode bc,
+            TR_J9ByteCodeIterator* bci
+        );
+
+        /**
+         * Generates a store instruction based on the type.
+         *
+         * @param buffer         code buffer
+         * @param method         method for introspection
+         * @param bc             Bytecode that generated the load instruction
+         * @return               size of generated code; 0 if method failed
+         */
+        buffer_size_t
+        generateStore(
             char* buffer,
             TR_ResolvedMethod* method,
             TR_J9ByteCode bc,
