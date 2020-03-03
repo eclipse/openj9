@@ -19,20 +19,20 @@ template_start debugBreakpoint
     int3           ; trigger hardware interrupt
 template_end debugBreakpoint
 
-template_start iLoad0Template
-    sub r10, 8      ; add 1 slot to stack (8 bytes)
-    mov [r10], rax  ; push 1st argument (rax) onto stack 
-template_end iLoad0Template
+; template_start iLoad0Template
+;     sub r10, 8      ; add 1 slot to stack (8 bytes)
+;     mov [r10], rax  ; push 1st argument (rax) onto stack 
+; template_end iLoad0Template
 
-template_start iLoad1Template
-    sub r10, 8      ; add 1 slot to stack (8 bytes)
-    mov [r10], rsi  ; move 2nd argument into first location in stack
-template_end iLoad1Template
+; template_start iLoad1Template
+;     sub r10, 8      ; add 1 slot to stack (8 bytes)
+;     mov [r10], rsi  ; move 2nd argument into first location in stack
+; template_end iLoad1Template
 
-template_start iLoad2Template
-    sub r10, 8      ; add 1 slot to stack (8 bytes)
-    mov [r10], rdx  ; move 3rd argument into first location in stack
-template_end iLoad2Template
+; template_start iLoad2Template
+;     sub r10, 8      ; add 1 slot to stack (8 bytes)
+;     mov [r10], rdx  ; move 3rd argument into first location in stack
+; template_end iLoad2Template
 
 ;All loads (value or reference) require adding stack space of 8 bytes
 ;  and the moving of values from a stack slot to a temp register
