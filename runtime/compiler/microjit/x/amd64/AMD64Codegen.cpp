@@ -1060,14 +1060,13 @@ MJIT::CodeGenerator::generatePrologue(
     //Max amount of data to be preserved. It is overkill, but as long as the prologue/epilogue save/load everything
     //  it is a workable solution for now. Later try to determine what registers need to be preserved ahead of time.
     U_32 preservedRegsSize = properties._numPreservedRegisters * properties.getPointerSize();
-    const int32_t localSize = properties.getOffsetToFirstLocal(); // - getLocalMapping
+    const int32_t localSize = (romMethod->argCount + romMethod->tempCount)*8;
     const int32_t pointerSize = properties.getPointerSize();
     MJIT_ASSERT(_logFileFP, localSize >= 0, "assertion failure");
     int32_t frameSize = localSize + preservedRegsSize + ( _linkage._properties.getReservesOutgoingArgsInPrologue() ? properties.getPointerSize() : 0 );
     uint32_t stackSize = frameSize + properties.getRetAddressWidth();
     uint32_t adjust = align(stackSize, properties.getOutgoingArgAlignment(), _logFileFP) - stackSize;
     auto allocSize = frameSize + adjust;
-    auto localArraySize = (romMethod->argCount + romMethod->tempCount)*8;
 
     //return address is allocated by call instruction
 
@@ -1093,7 +1092,6 @@ MJIT::CodeGenerator::generatePrologue(
     _stackPeakSize = 
         allocSize + //space for stack frame
         properties.getPointerSize() + //space for return address
-        localArraySize + //Space for local array
         _stackPeakSize; //space for mjit value stack (set in CompilationInfoPerThreadBase::mjit)
 
     //bool doOverflowCheck = !comp()->isDLT();

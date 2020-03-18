@@ -9023,7 +9023,7 @@ TR::CompilationInfoPerThreadBase::mjit(
       char * jitStackOverflowPatchLocation = NULL;
             
       J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
-      int32_t peakAllocSize = romMethod->maxStack * 8;
+      mjit_cg.setPeakStackSize(romMethod->maxStack * 8);
       char* firstInstructionLocation = NULL;
 
       code_size = mjit_cg.generatePrologue(
