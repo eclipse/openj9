@@ -1282,12 +1282,24 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             case TR_J9ByteCode::J9BCidiv:
                 trfprintf(_logFileFP, "J9BCidiv\n");
                 COPY_TEMPLATE(buffer, iDivTemplate, codeGenSize);
-                break;    
+                break;
+            case TR_J9ByteCode::J9BCladd:
+                trfprintf(_logFileFP, "J9BCladd\n");
+                COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
+                break;
             case TR_J9ByteCode::J9BCgenericReturn:
                 trfprintf(_logFileFP, "J9BCgenericReturn\n");
                 if(method->returnType() == TR::Int32)
                 {
                     trfprintf(_logFileFP, "Return type : Int32\n"); 
+                    buffer_size_t epilogueSize = generateEpologue(buffer);
+                    buffer += epilogueSize;
+                    codeGenSize += epilogueSize;
+                    COPY_TEMPLATE(buffer, iReturnTemplate, codeGenSize);                
+                }
+                else if(method->returnType() == TR::Int64)
+                {
+                    trfprintf(_logFileFP, "Return type : Int64\n"); 
                     buffer_size_t epilogueSize = generateEpologue(buffer);
                     buffer += epilogueSize;
                     codeGenSize += epilogueSize;
