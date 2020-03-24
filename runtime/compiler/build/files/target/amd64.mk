@@ -35,6 +35,7 @@ JIT_PRODUCT_SOURCE_FILES+=\
     compiler/x/amd64/codegen/AMD64PrivateLinkage.cpp \
     compiler/x/amd64/codegen/J9CodeGenerator.cpp \
     compiler/microjit/x/amd64/AMD64Codegen.cpp \
+    compiler/microjit/x/amd64/AMD64CodegenGC.cpp \
     compiler/microjit/x/amd64/AMD64Linkage.cpp \
     compiler/microjit/x/amd64/templates/linkage.nasm \
     compiler/microjit/x/amd64/templates/bytecodes.nasm

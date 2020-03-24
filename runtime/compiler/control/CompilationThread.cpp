@@ -99,6 +99,7 @@
 #include "ilgen/J9ByteCodeIterator.hpp"
 #include "ilgen/J9ByteCodeIteratorWithState.hpp"
 #include "microjit/x/amd64/AMD64Codegen.hpp"
+#include "microjit/x/amd64/AMD64CodegenGC.hpp"
 #include "microjit/utils.hpp"
 #if defined(J9VM_OPT_JITSERVER)
 #include "control/JITClientCompilationThread.hpp"
@@ -8974,11 +8975,29 @@ TR::CompilationInfoPerThreadBase::mjit(
 
       J9Method *method = _methodBeingCompiled->getMethodDetails().getMethod();
 
-       TR::Options *options = TR::Options::getJITCmdLineOptions();
+      TR::Options *options = TR::Options::getJITCmdLineOptions();
+
+      J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
+      U_16 maxLength = J9UTF8_LENGTH(J9ROMMETHOD_SIGNATURE(romMethod));
+      char typeString[maxLength];
+      if(MJIT::nativeSignature(method, typeString))
+         {
+         return 0;
+         }
+
+      U_16 paramCount = MJIT::getParamCount(typeString, maxLength);
+      MJIT::ParamTableEntry paramTableEntries[paramCount];
+
+      int error_code = 0;
+      MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, maxLength, &error_code, paramTableEntries, paramCount);
+      if(error_code)
+         MJIT_COMPILE_ERROR(0, method);
+      
+      MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
 
 #define MAX_BUFFER_SIZE 1024
       // zeroed buffer for generated code
-      MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, this->getCompilation()->getOutFile(), vm);
+      MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, this->getCompilation()->getOutFile(), vm, &paramTable);
       char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
       memset(buffer, 0, MAX_BUFFER_SIZE);
 
@@ -8989,6 +9008,11 @@ TR::CompilationInfoPerThreadBase::mjit(
       buffer_size_t buffer_size = 0;
 
       TR_PersistentJittedBodyInfo* bodyInfo;
+
+      comp()->cg()->createStackAtlas();
+
+      //MJIT::CodeGenGC mjit_cg_gc;
+      //mjit_cg_gc.createStackAtlas(compiler);
             
       char *magicWordLocation, *first2BytesPatchLocation;
       buffer_size_t code_size = mjit_cg.generatePrePrologue(
@@ -9004,9 +9028,10 @@ TR::CompilationInfoPerThreadBase::mjit(
       MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after pre-prologue");
 
       trfprintf(this->getCompilation()->getOutFile(), "\ngeneratePrePrologue\n");
-      for(int32_t i = 0; i < code_size; i++){
+      for(int32_t i = 0; i < code_size; i++)
+         {
          trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
-      }
+         }
 
       cursor += code_size;
 
@@ -9014,15 +9039,15 @@ TR::CompilationInfoPerThreadBase::mjit(
       char * prologue_address = cursor;
 
       // generate debug breakpoint
-      if (comp()->getOption(TR_EntryBreakPoints)){  
+      if (comp()->getOption(TR_EntryBreakPoints))
+         {  
          code_size = mjit_cg.generateDebugBreakpoint(cursor);
          cursor += code_size;
          buffer_size += code_size;
-      }
+         }
 
       char * jitStackOverflowPatchLocation = NULL;
-            
-      J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
+
       mjit_cg.setPeakStackSize(romMethod->maxStack * 8);
       char* firstInstructionLocation = NULL;
 
@@ -9041,9 +9066,10 @@ TR::CompilationInfoPerThreadBase::mjit(
       MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after prologue");
 
       trfprintf(this->getCompilation()->getOutFile(), "\ngeneratePrologue\n");
-      for(int32_t i = 0; i < code_size; i++){
+      for(int32_t i = 0; i < code_size; i++)
+         {
          trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
-      }
+         }
       cursor += code_size;
 
       // GENERATE BODY
@@ -9069,9 +9095,10 @@ TR::CompilationInfoPerThreadBase::mjit(
       MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after body");
 
       trfprintf(this->getCompilation()->getOutFile(), "\ngenerateBody\n");
-      for(int32_t i = 0; i < code_size; i++){
+      for(int32_t i = 0; i < code_size; i++)
+         {
          trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
-      }
+         }
 
       cursor += code_size;
       // END GENERATE BODY
@@ -9084,14 +9111,16 @@ TR::CompilationInfoPerThreadBase::mjit(
       MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after cold-area");
 
       trfprintf(this->getCompilation()->getOutFile(), "\ngenerateColdArea\n");
-      for(int32_t i = 0; i < code_size; i++){
+      for(int32_t i = 0; i < code_size; i++)
+         {
          trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
-      }
+         }
 
       trfprintf(this->getCompilation()->getOutFile(), "\nfinal method\n");
-      for(int32_t i = 0; i < buffer_size; i++){
+      for(int32_t i = 0; i < buffer_size; i++)
+         {
          trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)buffer[i]) & (unsigned char)0xff);
-      }
+         }
       cursor += code_size;
 
       // As the body is finished, mark its profile info as active so that the JProfiler thread will inspect it
@@ -9106,7 +9135,6 @@ TR::CompilationInfoPerThreadBase::mjit(
       //
       compiler->cg()->setBinaryBufferCursor((uint8_t*)(cursor));
       compiler->cg()->setBinaryBufferStart((uint8_t*)(&buffer[sizeof(OMR::CodeCacheMethodHeader)]));
-      compiler->cg()->createStackAtlas();
       metaData = createMJITMethodMetaData(vm, compilee, compiler);
       if (!metaData)
          {

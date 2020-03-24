@@ -50,13 +50,39 @@ typeSignatureSize(char typeBuffer)
 | x86-64 		| Little | Stack 		  | R8 (receiver in RAX)
 
 | Integer Return value registers    | Integer Preserved registers   | Integer Argument registers
-| EAX (32-bit) RAX (64-bit)         | RBX R9-R15                    | RAX RSI RDX RCX 
+| EAX (32-bit) RAX (64-bit)         | RBX R9                        | RAX RSI RDX RCX 
 
 | Float Return value registers  | Float Preserved registers | Float Argument registers
 | XMM0                          | XMM8-XMM15        		| XMM0-XMM7 
 */
 
-struct ParamTable {
+struct ParamTableEntry {
+    bool onStack;
+    //Bottom 32 bits are the RealRegister if onStack is false
+    uintptr_t address;
+    //Stored here so we can look up when saving to local array
+    char slots;
+};
+
+inline ParamTableEntry
+makeRegisterEntry(int regNo, U_16 size){
+    ParamTableEntry entry;
+    entry.address = (uintptr_t)regNo;
+    entry.onStack = false;
+    entry.slots = size/8;
+    return entry;
+}
+
+inline ParamTableEntry
+makeStackEntry(uintptr_t stackAddress, U_16 size){
+    ParamTableEntry entry;
+    entry.address = stackAddress;
+    entry.onStack = true;
+    entry.slots = size/8;
+    return entry;
+}
+
+struct RegisterStack {
     unsigned char useRAX : 2;
     unsigned char useRSI : 2;
     unsigned char useRDX : 2;
@@ -73,99 +99,113 @@ struct ParamTable {
 };
 
 inline U_16
-calculateOffset(ParamTable* table)
+calculateOffset(RegisterStack* stack)
 {
-    return  8*(table->useRAX  +
-               table->useRSI  +
-               table->useRDX  +
-               table->useRCX  +
-               table->useXMM0 +
-               table->useXMM1 +
-               table->useXMM2 +
-               table->useXMM3 +
-               table->useXMM4 +
-               table->useXMM5 +
-               table->useXMM6 +
-               table->useXMM7 +
-               table->stackSlotsUsed);
+    return  8*(stack->useRAX  +
+               stack->useRSI  +
+               stack->useRDX  +
+               stack->useRCX  +
+               stack->useXMM0 +
+               stack->useXMM1 +
+               stack->useXMM2 +
+               stack->useXMM3 +
+               stack->useXMM4 +
+               stack->useXMM5 +
+               stack->useXMM6 +
+               stack->useXMM7 +
+               stack->stackSlotsUsed);
 }
 
 inline void
-initParamTable(ParamTable* table)
+initParamStack(RegisterStack* stack)
 {
-    table->useRAX         = 0;
-    table->useRSI         = 0;
-    table->useRDX         = 0;
-    table->useRCX         = 0;
-    table->useXMM0        = 0;
-    table->useXMM1        = 0;
-    table->useXMM2        = 0;
-    table->useXMM3        = 0;
-    table->useXMM4        = 0;
-    table->useXMM5        = 0;
-    table->useXMM6        = 0;
-    table->useXMM7        = 0;
-    table->stackSlotsUsed = 0;
+    stack->useRAX         = 0;
+    stack->useRSI         = 0;
+    stack->useRDX         = 0;
+    stack->useRCX         = 0;
+    stack->useXMM0        = 0;
+    stack->useXMM1        = 0;
+    stack->useXMM2        = 0;
+    stack->useXMM3        = 0;
+    stack->useXMM4        = 0;
+    stack->useXMM5        = 0;
+    stack->useXMM6        = 0;
+    stack->useXMM7        = 0;
+    stack->stackSlotsUsed = 0;
 }
 
-inline void
-addParamInt(ParamTable* table, U_16 size)
+inline int
+addParamIntToStack(RegisterStack* stack, U_16 size)
 {
-    if(!table->useRAX){
-        table->useRAX = size/8;
-    } else if(!table->useRSI){
-        table->useRSI = size/8;
-    } else if(!table->useRDX){
-        table->useRDX = size/8;
-    } else if(!table->useRCX){
-        table->useRCX = size/8;
+    if(!stack->useRAX){
+        stack->useRAX = size/8;
+        return RealRegister::eax;
+    } else if(!stack->useRSI){
+        stack->useRSI = size/8;
+        return RealRegister::esi;
+    } else if(!stack->useRDX){
+        stack->useRDX = size/8;
+        return RealRegister::edx;
+    } else if(!stack->useRCX){
+        stack->useRCX = size/8;
+        return RealRegister::ecx;
     } else {
-        table->stackSlotsUsed += size/8;
-    }
-}
-
-inline void
-addParamFloat(ParamTable* table, U_16 size)
-{
-    if(!table->useXMM0){
-        table->useXMM0 = size/8;
-    } else if(!table->useXMM1){
-        table->useXMM1 = size/8;
-    } else if(!table->useXMM2){
-        table->useXMM2 = size/8;
-    } else if(!table->useXMM3){
-        table->useXMM3 = size/8;
-    } else if(!table->useXMM4){
-        table->useXMM4 = size/8;
-    } else if(!table->useXMM5){
-        table->useXMM5 = size/8;
-    } else if(!table->useXMM6){
-        table->useXMM6 = size/8;
-    } else if(!table->useXMM7){
-        table->useXMM7 = size/8;
-    } else {
-        table->stackSlotsUsed += size/8;
+        stack->stackSlotsUsed += size/8;
+        return RealRegister::NoReg;
     }
 }
 
 inline int
-removeParamInt(ParamTable* table, U_16 *size)
+addParamFloatToStack(RegisterStack* stack, U_16 size)
 {
-    if(table->useRAX){
-        *size = table->useRAX*8;
-        table->useRAX = 0;
+    if(!stack->useXMM0){
+        stack->useXMM0 = size/8;
+        return RealRegister::xmm0;
+    } else if(!stack->useXMM1){
+        stack->useXMM1 = size/8;
+        return RealRegister::xmm1;
+    } else if(!stack->useXMM2){
+        stack->useXMM2 = size/8;
+        return RealRegister::xmm2;
+    } else if(!stack->useXMM3){
+        stack->useXMM3 = size/8;
+        return RealRegister::xmm3;
+    } else if(!stack->useXMM4){
+        stack->useXMM4 = size/8;
+        return RealRegister::xmm4;
+    } else if(!stack->useXMM5){
+        stack->useXMM5 = size/8;
+        return RealRegister::xmm5;
+    } else if(!stack->useXMM6){
+        stack->useXMM6 = size/8;
+        return RealRegister::xmm6;
+    } else if(!stack->useXMM7){
+        stack->useXMM7 = size/8;
+        return RealRegister::xmm7;
+    } else {
+        stack->stackSlotsUsed += size/8;
+        return RealRegister::NoReg;
+    }
+}
+
+inline int
+removeParamIntFromStack(RegisterStack* stack, U_16 *size)
+{
+    if(stack->useRAX){
+        *size = stack->useRAX*8;
+        stack->useRAX = 0;
         return RealRegister::eax;
-    } else if(table->useRSI){
-        *size = table->useRSI*8;
-        table->useRSI = 0;
+    } else if(stack->useRSI){
+        *size = stack->useRSI*8;
+        stack->useRSI = 0;
         return RealRegister::esi;
-    } else if(table->useRDX){
-        *size = table->useRDX*8;
-        table->useRDX = 0;
+    } else if(stack->useRDX){
+        *size = stack->useRDX*8;
+        stack->useRDX = 0;
         return RealRegister::edx;
-    } else if(table->useRCX){
-        *size = table->useRCX*8;
-        table->useRCX = 0;
+    } else if(stack->useRCX){
+        *size = stack->useRCX*8;
+        stack->useRCX = 0;
         return RealRegister::ecx;
     } else {
         *size = 0;
@@ -174,45 +214,68 @@ removeParamInt(ParamTable* table, U_16 *size)
 }
 
 inline int
-removeParamFloat(ParamTable* table, U_16 *size)
+removeParamFloatFromStack(RegisterStack* stack, U_16 *size)
 {
-    if(table->useXMM0){
-        *size = table->useXMM0*8;
-        table->useXMM0 = 0;
+    if(stack->useXMM0){
+        *size = stack->useXMM0*8;
+        stack->useXMM0 = 0;
         return RealRegister::xmm0;
-    } else if(table->useXMM1){
-        *size = table->useXMM1*8;
-        table->useXMM1 = 0;
+    } else if(stack->useXMM1){
+        *size = stack->useXMM1*8;
+        stack->useXMM1 = 0;
         return RealRegister::xmm1;
-    } else if(table->useXMM2){
-        *size = table->useXMM2*8;
-        table->useXMM2 = 0;
+    } else if(stack->useXMM2){
+        *size = stack->useXMM2*8;
+        stack->useXMM2 = 0;
         return RealRegister::xmm2;
-    } else if(table->useXMM3){
-        *size = table->useXMM3*8;
-        table->useXMM3 = 0;
+    } else if(stack->useXMM3){
+        *size = stack->useXMM3*8;
+        stack->useXMM3 = 0;
         return RealRegister::xmm3;
-    } else if(table->useXMM4){
-        *size = table->useXMM4*8;
-        table->useXMM4 = 0;
+    } else if(stack->useXMM4){
+        *size = stack->useXMM4*8;
+        stack->useXMM4 = 0;
         return RealRegister::xmm4;
-    } else if(table->useXMM5){
-        *size = table->useXMM5*8;
-        table->useXMM5 = 0;
+    } else if(stack->useXMM5){
+        *size = stack->useXMM5*8;
+        stack->useXMM5 = 0;
         return RealRegister::xmm5;
-    } else if(table->useXMM6){
-        *size = table->useXMM6*8;
-        table->useXMM6 = 0;
+    } else if(stack->useXMM6){
+        *size = stack->useXMM6*8;
+        stack->useXMM6 = 0;
         return RealRegister::xmm6;
-    } else if(table->useXMM7){
-        *size = table->useXMM7*8;
-        table->useXMM7 = 0;
+    } else if(stack->useXMM7){
+        *size = stack->useXMM7*8;
+        stack->useXMM7 = 0;
         return RealRegister::xmm7;
     } else {
         *size = 0;
         return RealRegister::NoReg;
     }
 }
+
+RegisterStack 
+mapIncomingParams(char*, U_16, int*, ParamTableEntry*, U_16);
+
+bool
+nativeSignature(J9Method* method, char *resultBuffer);
+
+int
+getParamCount(char *typeString, U_16 maxLength);
+
+class ParamTable
+{
+    private:
+        ParamTableEntry* _tableEntries;
+        U_16 _paramCount;
+        RegisterStack* _registerStack;
+
+    public:
+        ParamTable(ParamTableEntry*, U_16, RegisterStack*);
+        ParamTableEntry getEntry(U_16);
+        U_16 getTotalParamSize();
+        U_16 getParamCount();
+};
 
 class CodeGenerator {
     private:
@@ -221,7 +284,7 @@ class CodeGenerator {
         TR_J9VMBase& _vm;
         TR::CodeCache *_codeCache;
         int32_t _stackPeakSize;
-        ParamTable mapIncomingParms(char*, U_16, int*);
+        ParamTable* _paramTable;
 
         buffer_size_t generateSwitchToInterpPrePrologue(
             char*,
@@ -235,23 +298,17 @@ class CodeGenerator {
         buffer_size_t generateEpologue(char*);
 
         buffer_size_t loadArgsFromStack(
-            ParamTable*,
             char*,
-            buffer_size_t,
-            char*
+            buffer_size_t
         );
 
         buffer_size_t saveArgsOnStack(
-            ParamTable*,
             char*,
-            buffer_size_t,
-            char*
+            buffer_size_t
         );
 
         buffer_size_t
         saveArgsInLocalArray(
-            ParamTable*,
-            char*,
             char*
         );
 
@@ -289,7 +346,7 @@ class CodeGenerator {
 
     public:
         CodeGenerator() = delete;
-        CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&);
+        CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*);
 
         inline void 
         setPeakStackSize(int32_t newSize)
