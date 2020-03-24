@@ -427,6 +427,17 @@ class CodeGenerator {
         );
 };
 
+class MJITCompilationFailure: public virtual std::exception
+   {
+public:
+   MJITCompilationFailure() { }
+   virtual const char* what() const throw()
+      {
+      return "Unable to compile method.";
+      }
+   };
+
+
 } //namespace MJIT
 
 #endif

@@ -2343,6 +2343,9 @@ bool TR::CompilationInfo::shouldRetryCompilation(TR_MethodToBeCompiled *entry, T
                entry->_optimizationPlan->setDisableGCR(); // GCR isn't needed
                tryCompilingAgain = true;
                break;
+            case mjitCompilationFailure:
+               tryCompilingAgain = true;
+               break;
             case compilationNullSubstituteCodeCache:
             case compilationCodeMemoryExhausted:
             case compilationCodeCacheError:
@@ -8745,7 +8748,7 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
       if( mjitExtra && !J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) 
          {
          metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
-         }
+      }
       else 
          {
          metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
@@ -8948,8 +8951,8 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
 // perform that work.
 #define MJIT_COMPILE_ERROR(code_size, method) do{\
    if(0 == code_size) {\
-      method->extra2 = 0;\
-      return NULL;\
+      method->extra2 = (void *) 0;\
+      compiler->failCompilation<MJIT::MJITCompilationFailure>("Cannot compile.");\
    }\
 } while(0)
 
@@ -8964,10 +8967,14 @@ TR::CompilationInfoPerThreadBase::mjit(
    TR::SegmentAllocator const &scratchSegmentProvider
    )
    {
+
+      TR_MethodMetaData* metaData = NULL;
+      bool volatile haveLockedClassUnloadMonitor = false; // used for compilation without VM acces
+      try 
+      {
       
    PORT_ACCESS_FROM_JITCONFIG(jitConfig);
-   TR_MethodMetaData* metaData = NULL;
-
+   
    // BEGIN MICROJIT
    TR::FilePointer* logFileFP = this->getCompilation()->getOutFile();
    if(TR::Options::canJITCompile())      
@@ -9183,10 +9190,41 @@ TR::CompilationInfoPerThreadBase::mjit(
       // END MICROJIT
 
       }
-         
-   return (TR_MethodMetaData *) metaData;
-   }
+      }
+      catch (const std::exception &e)
+      {
+      const char *exceptionName;
 
+#if defined(J9ZOS390)
+      // Compiling with -Wc,lp64 results in a crash on z/OS when trying
+      // to call the what() virtual method of the exception.
+      exceptionName = "std::exception";
+#else
+      exceptionName = e.what();
+#endif
+
+      printCompFailureInfo(compiler, exceptionName);
+      processException(vmThread, scratchSegmentProvider, compiler, haveLockedClassUnloadMonitor, exceptionName);
+      metaData = 0;
+      }
+
+      // At this point the compilation has either succeeded and compilation cannot be
+      // interrupted anymore, or it has failed. In either case _compilationShouldBeinterrupted flag
+      // is not needed anymore
+      setCompilationShouldBeInterrupted(0);
+
+      // We should not have the classTableMutex at this point
+      TR_ASSERT_FATAL(!TR::MonitorTable::get()->getClassTableMutex()->owned_by_self(),
+                     "Should not still own classTableMutex");
+
+      // Increment the number of JIT compilations (either successful or not)
+      // performed by this compilation thread
+      //
+      incNumJITCompilations();
+
+      return metaData;
+   }
+         
 // This routine should only be called from wrappedCompile
 TR_MethodMetaData *
 TR::CompilationInfoPerThreadBase::compile(
@@ -11209,6 +11247,12 @@ TR::CompilationInfoPerThreadBase::processException(
       _methodBeingCompiled->_compErrCode = compilationHeapLimitExceeded;
       }
    /* Allocation Exceptions End */
+
+   catch (const MJIT::MJITCompilationFailure &e)
+      {
+       shouldProcessExceptionCommonTasks = false;
+      _methodBeingCompiled->_compErrCode = mjitCompilationFailure;
+      }
 
    /* IL Gen Exceptions Start */
    catch (const J9::AOTHasInvokeHandle &e)
