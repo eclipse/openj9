@@ -8968,20 +8968,36 @@ TR::CompilationInfoPerThreadBase::mjit(
    )
    {
 
+   PORT_ACCESS_FROM_JITCONFIG(jitConfig);
+
    TR_MethodMetaData* metaData = NULL;
+   J9Method *method = NULL;
+
+   if (_methodBeingCompiled->_priority >= CP_SYNC_MIN)
+      ++_compInfo._numSyncCompilations;
+   else
+      ++_compInfo._numAsyncCompilations;
+
+   if (_methodBeingCompiled->isDLTCompile())
+      compiler->setDltBcIndex(static_cast<J9::MethodInProgressDetails &>(_methodBeingCompiled->getMethodDetails()).getByteCodeIndex());
+
    bool volatile haveLockedClassUnloadMonitor = false; // used for compilation without VM acces
+   
    try 
       {
-      
-      PORT_ACCESS_FROM_JITCONFIG(jitConfig);
-      
+
+      InterruptibleOperation compilingMethodBody(*this);
+
+      TR::IlGeneratorMethodDetails & details = _methodBeingCompiled->getMethodDetails();
+      method = details.getMethod();
+
+      TRIGGER_J9HOOK_JIT_COMPILING_START(_jitConfig->hookInterface, vmThread, method); 
+ 
       // BEGIN MICROJIT
       TR::FilePointer* logFileFP = this->getCompilation()->getOutFile();
+ 
       if(TR::Options::canJITCompile())      
          {
-
-         J9Method *method = _methodBeingCompiled->getMethodDetails().getMethod();
-
          TR::Options *options = TR::Options::getJITCmdLineOptions();
 
          J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
@@ -9189,6 +9205,8 @@ TR::CompilationInfoPerThreadBase::mjit(
          // END MICROJIT
 
          }
+
+      TRIGGER_J9HOOK_JIT_COMPILING_END(_jitConfig->hookInterface, vmThread, method);
       }
       catch (const std::exception &e)
          {
