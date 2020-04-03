@@ -24,8 +24,10 @@
 
 namespace MJIT {
     class CodeGenGC {
+        private:
+            TR::FilePointer* _logFileFP;
         public:
-            CodeGenGC();
-            TR::GCStackAtlas* createStackAtlas(TR::Compilation *comp);
+            CodeGenGC(TR::FilePointer* logFileFP);
+            TR::GCStackAtlas* createStackAtlas(TR::Compilation*, ParamTable*, LocalTable*);
     };
 }

@@ -56,32 +56,6 @@ typeSignatureSize(char typeBuffer)
 | XMM0                          | XMM8-XMM15        		| XMM0-XMM7 
 */
 
-struct ParamTableEntry {
-    bool onStack;
-    //Bottom 32 bits are the RealRegister if onStack is false
-    uintptr_t address;
-    //Stored here so we can look up when saving to local array
-    char slots;
-};
-
-inline ParamTableEntry
-makeRegisterEntry(int regNo, U_16 size){
-    ParamTableEntry entry;
-    entry.address = (uintptr_t)regNo;
-    entry.onStack = false;
-    entry.slots = size/8;
-    return entry;
-}
-
-inline ParamTableEntry
-makeStackEntry(uintptr_t stackAddress, U_16 size){
-    ParamTableEntry entry;
-    entry.address = stackAddress;
-    entry.onStack = true;
-    entry.slots = size/8;
-    return entry;
-}
-
 struct RegisterStack {
     unsigned char useRAX : 2;
     unsigned char useRSI : 2;
@@ -254,14 +228,36 @@ removeParamFloatFromStack(RegisterStack* stack, U_16 *size)
     }
 }
 
-RegisterStack 
-mapIncomingParams(char*, U_16, int*, ParamTableEntry*, U_16);
+struct ParamTableEntry {
+    int32_t offset;
+    int32_t regNo;
+    //Stored here so we can look up when saving to local array
+    char slots;
+    bool isReference;
+    bool onStack;
+};
 
-bool
-nativeSignature(J9Method* method, char *resultBuffer);
+inline ParamTableEntry
+makeRegisterEntry(int32_t regNo, int32_t stackOffset, U_16 size, bool isRef){
+    ParamTableEntry entry;
+    entry.regNo = regNo;
+    entry.offset = stackOffset;
+    entry.onStack = false;
+    entry.slots = size/8;
+    entry.isReference = isRef;
+    return entry;
+}
 
-int
-getParamCount(char *typeString, U_16 maxLength);
+inline ParamTableEntry
+makeStackEntry(int32_t stackOffset, U_16 size, bool isRef){
+    ParamTableEntry entry;
+    entry.regNo = MJIT::RealRegister::NoReg;
+    entry.offset = stackOffset;
+    entry.onStack = true;
+    entry.slots = size/8;
+    entry.isReference = isRef;
+    return entry;
+}
 
 class ParamTable
 {
@@ -269,13 +265,35 @@ class ParamTable
         ParamTableEntry* _tableEntries;
         U_16 _paramCount;
         RegisterStack* _registerStack;
-
     public:
         ParamTable(ParamTableEntry*, U_16, RegisterStack*);
-        ParamTableEntry getEntry(U_16);
+        bool getEntry(U_16, ParamTableEntry*);
         U_16 getTotalParamSize();
         U_16 getParamCount();
 };
+
+using LocalTableEntry=ParamTableEntry;
+
+class LocalTable
+{
+    private:
+        LocalTableEntry* _tableEntries;
+        U_16 _localCount;
+    public:
+        LocalTable(LocalTableEntry*, U_16);
+        bool getEntry(U_16, LocalTableEntry*);
+        U_16 getTotalLocalSize();
+        U_16 getLocalCount();
+};
+
+RegisterStack 
+mapIncomingParams(char*, U_16, int*, ParamTableEntry*, U_16, TR::FilePointer*);
+
+bool
+nativeSignature(J9Method* method, char *resultBuffer);
+
+int
+getParamCount(char *typeString, U_16 maxLength);
 
 class CodeGenerator {
     private:
@@ -309,7 +327,8 @@ class CodeGenerator {
 
         buffer_size_t
         saveArgsInLocalArray(
-            char*
+            char*,
+            buffer_size_t
         );
 
         /**

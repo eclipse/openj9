@@ -13,6 +13,23 @@
 #define BIT_MASK_32 0xffffffff
 #define BIT_MASK_64 0xffffffffffffffff
 
+//Debug Params, comment/uncomment undef to get omit/enable debugging info
+#define MJIT_DEBUG 1
+//#undef MJIT_DEBUG
+
+#ifdef MJIT_DEBUG 
+#define MJIT_DEBUG_MAP_PARAMS 1 
+#else 
+#undef MJIT_DEBUG_MAP_PARAMS 
+#endif
+#ifdef MJIT_DEBUG 
+#define MJIT_DEBUG_BC_WALKING 1
+#define MJIT_DEBUG_BC_LOG (logFile, text) trfprintf(logFile, text)
+#else 
+#undef MJIT_DEBUG_BC_WALKING 
+#define MJIT_DEBUG_BC_LOG (logFile, text) do {} while(0)
+#endif
+
 #define STACKCHECKBUFFER 512
 
 #include <string.h>
@@ -135,6 +152,7 @@ DECLARE_TEMPLATE(saveRAXLocal);
 DECLARE_TEMPLATE(saveRSILocal);
 DECLARE_TEMPLATE(saveRDXLocal);
 DECLARE_TEMPLATE(saveRCXLocal);
+DECLARE_TEMPLATE(saveR11Local);
 DECLARE_TEMPLATE(callByteRel);
 DECLARE_TEMPLATE(call4ByteRel);
 DECLARE_TEMPLATE(jump4ByteRel);
@@ -143,15 +161,17 @@ DECLARE_TEMPLATE(movRDIImm64);
 DECLARE_TEMPLATE(movEDIImm32);
 DECLARE_TEMPLATE(movRAXImm64);
 DECLARE_TEMPLATE(movEAXImm32);
+DECLARE_TEMPLATE(movRSPOffsetR11);
 DECLARE_TEMPLATE(jumpRDI);
 DECLARE_TEMPLATE(jumpRAX);
 
 // bytecodes
 DECLARE_TEMPLATE(debugBreakpoint);
-DECLARE_TEMPLATE(loadTemplatePrologue);
-DECLARE_TEMPLATE(vLoadTemplate); // Load a value
-DECLARE_TEMPLATE(vStoreTemplatePrologue); // Store a value
+DECLARE_TEMPLATE(loadTemplatePrologue); //This prologue exists because the instruction in the middle is the one which must be patched.
+DECLARE_TEMPLATE(loadTemplate);
 DECLARE_TEMPLATE(storeTemplate);
+DECLARE_TEMPLATE(getFieldTemplatePrologue);
+DECLARE_TEMPLATE(getFieldTemplate);
 DECLARE_TEMPLATE(iAddTemplate);
 DECLARE_TEMPLATE(iSubTemplate);
 DECLARE_TEMPLATE(iMulTemplate);
@@ -387,12 +407,17 @@ loadPreserveRegisters(char* buffer, int32_t offset)
     patchImm8(buffer, (U_64)(value));\
 }while(0)
 
-#undef MJIT_DEBUG_MAP_PARAMS
 MJIT::RegisterStack 
-MJIT::mapIncomingParams(char* typeString, U_16 maxLength, int* error_code, MJIT::ParamTableEntry* paramTable, U_16 paramCount)
-{
+MJIT::mapIncomingParams(
+    char* typeString, 
+    U_16 maxLength, 
+    int* error_code, 
+    ParamTableEntry* paramTable, 
+    U_16 paramCount, 
+    TR::FilePointer *logFileFP
+){
 #ifdef MJIT_DEBUG_MAP_PARAMS
-    trfprintf(_logFileFP, "MapIncomingParams Start:\n");
+    trfprintf(logFileFP, "MapIncomingParams Start:\n");
 #endif
     MJIT::RegisterStack stack;
     initParamStack(&stack);
@@ -401,38 +426,41 @@ MJIT::mapIncomingParams(char* typeString, U_16 maxLength, int* error_code, MJIT:
     intptr_t offset = 0;
 
 #ifdef MJIT_DEBUG_MAP_PARAMS
-    trfprintf(_logFileFP, "  maxLength: %04x\n", maxLength);
-    trfprintf(_logFileFP, "  MapIncomingParamsLoop Start:\n");
+    trfprintf(logFileFP, "  maxLength: %04x\n", maxLength);
+    trfprintf(logFileFP, "  MapIncomingParamsLoop Start:\n");
 #endif
     for(int i = 0; i<paramCount; i++){
 #ifdef MJIT_DEBUG_MAP_PARAMS
-        trfprintf(_logFileFP, "    i: %04x\n", i);
+        trfprintf(logFileFP, "    i: %04x\n", i);
 #endif
         //3rd index of typeString is first param.
         char typeChar = typeString[i+3];
-        U_16 size = MJIT::typeSignatureSize(typeChar);
+        U_16 size = typeSignatureSize(typeChar);
+        U_16 currentOffset = calculateOffset(&stack);
 #ifdef MJIT_DEBUG_MAP_PARAMS
-        trfprintf(_logFileFP, "    ParamTableSize: %04x\n", size);
+        trfprintf(logFileFP, "    ParamTableSize: %04x\n", size);
 #endif
         int regNo = RealRegister::NoReg;
+        bool isRef = false;
         switch(typeChar){
+        case MJIT::CLASSNAME_TYPE_CHARACTER:
+            isRef = true;
         case MJIT::BYTE_TYPE_CHARACTER:
         case MJIT::CHAR_TYPE_CHARACTER:
         case MJIT::INT_TYPE_CHARACTER:
-        case MJIT::CLASSNAME_TYPE_CHARACTER:
         case MJIT::SHORT_TYPE_CHARACTER:
         case MJIT::BOOLEAN_TYPE_CHARACTER:
         case MJIT::LONG_TYPE_CHARACTER:
-            regNo = MJIT::addParamIntToStack(&stack, size);
+            regNo = addParamIntToStack(&stack, size);
             goto makeParamTableEntry;
         case MJIT::DOUBLE_TYPE_CHARACTER:
         case MJIT::FLOAT_TYPE_CHARACTER:
-            regNo = MJIT::addParamFloatToStack(&stack, size);
+            regNo = addParamFloatToStack(&stack, size);
             goto makeParamTableEntry;
         makeParamTableEntry:
             paramTable[i] = (regNo != RealRegister::NoReg) ? //If this is a register
-                makeRegisterEntry(regNo, size): //Add a register entry
-                makeStackEntry((stack.stackSlotsUsed-1)*8, size); //else it's a stack entry
+                makeRegisterEntry(regNo, currentOffset, size, isRef): //Add a register entry
+                makeStackEntry(currentOffset, size, isRef); //else it's a stack entry
                 //first stack entry (1 used) should be at offset 0.
             break;
         default:
@@ -440,20 +468,20 @@ MJIT::mapIncomingParams(char* typeString, U_16 maxLength, int* error_code, MJIT:
             return stack;
         }
 #ifdef MJIT_DEBUG_MAP_PARAMS
-        trfprintf(_logFileFP, "    Table:\n");
-        trfprintf(_logFileFP, "%01x", stack.useRAX);
-        trfprintf(_logFileFP, "%01x", stack.useRSI);
-        trfprintf(_logFileFP, "%01x", stack.useRDX);
-        trfprintf(_logFileFP, "%01x", stack.useRCX);
-        trfprintf(_logFileFP, "%01x", stack.useXMM0);
-        trfprintf(_logFileFP, "%01x", stack.useXMM1);
-        trfprintf(_logFileFP, "%01x", stack.useXMM2);
-        trfprintf(_logFileFP, "%01x", stack.useXMM3);
-        trfprintf(_logFileFP, "%01x", stack.useXMM4);
-        trfprintf(_logFileFP, "%01x", stack.useXMM5);
-        trfprintf(_logFileFP, "%01x", stack.useXMM6);
-        trfprintf(_logFileFP, "%01x", stack.useXMM7);
-        trfprintf(_logFileFP, "%02x", stack.stackSlotsUsed);
+        trfprintf(logFileFP, "    Table:\n");
+        trfprintf(logFileFP, "%01x", stack.useRAX);
+        trfprintf(logFileFP, "%01x", stack.useRSI);
+        trfprintf(logFileFP, "%01x", stack.useRDX);
+        trfprintf(logFileFP, "%01x", stack.useRCX);
+        trfprintf(logFileFP, "%01x", stack.useXMM0);
+        trfprintf(logFileFP, "%01x", stack.useXMM1);
+        trfprintf(logFileFP, "%01x", stack.useXMM2);
+        trfprintf(logFileFP, "%01x", stack.useXMM3);
+        trfprintf(logFileFP, "%01x", stack.useXMM4);
+        trfprintf(logFileFP, "%01x", stack.useXMM5);
+        trfprintf(logFileFP, "%01x", stack.useXMM6);
+        trfprintf(logFileFP, "%01x", stack.useXMM7);
+        trfprintf(logFileFP, "%02x", stack.stackSlotsUsed);
 #endif
     }
 
@@ -502,17 +530,19 @@ lcm(uint32_t a, uint32_t b)
     return a * b / gcd(a, b);
 }
 
-
 MJIT::ParamTable::ParamTable(ParamTableEntry* tableEntries, U_16 paramCount, RegisterStack* registerStack)
     : _tableEntries(tableEntries)
     , _paramCount(paramCount)
     , _registerStack(registerStack)
 {}
 
-MJIT::ParamTableEntry
-MJIT::ParamTable::getEntry(U_16 paramIndex)
+bool
+MJIT::ParamTable::getEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
 {
-    return _tableEntries[paramIndex];
+    bool success = paramIndex < _paramCount;
+    if(success)
+        *entry = _tableEntries[paramIndex];
+    return success;
 }
 
 U_16
@@ -527,18 +557,51 @@ MJIT::ParamTable::getParamCount()
     return _paramCount;
 }
 
+MJIT::LocalTable::LocalTable(LocalTableEntry* tableEntries, U_16 localCount)
+    : _tableEntries(tableEntries)
+    , _localCount(localCount)
+{}
+
+bool
+MJIT::LocalTable::getEntry(U_16 localIndex, MJIT::LocalTableEntry* entry)
+{
+    bool success = localIndex < _localCount;
+    if(success)
+        *entry = _tableEntries[localIndex];
+    return success;
+}
+
+U_16
+MJIT::LocalTable::getTotalLocalSize()
+{
+    U_16 localSize = 0;
+    for(int i=0; i<_localCount; i++){
+        localSize += _tableEntries[i].slots*8;
+    }
+    return localSize;
+}
+
+U_16
+MJIT::LocalTable::getLocalCount()
+{
+    return _localCount;
+}
+
 buffer_size_t
 MJIT::CodeGenerator::saveArgsInLocalArray(
-    char* buffer
+    char* buffer,
+    buffer_size_t stack_alloc_space
 ){
     buffer_size_t saveSize = 0;
     U_16 slot = 0;
     RealRegister::RegNum regNum = RealRegister::NoReg;
-    for(int i=0; i<_paramTable->getParamCount(); i++){
-        ParamTableEntry entry = _paramTable->getEntry(i);
+    int index = 0;
+    for(; index<_paramTable->getParamCount(); index++){
+        ParamTableEntry entry;
+        MJIT_ASSERT(_logFileFP, _paramTable->getEntry(index, &entry), "Bad index for table entry");
         if(entry.onStack)
             break;
-        int regNum = (int)entry.address;
+        int32_t regNum = entry.regNo;
         switch(regNum){
             case RealRegister::xmm0:
                 COPY_TEMPLATE(buffer, saveXMM0Local, saveSize);
@@ -584,7 +647,23 @@ MJIT::CodeGenerator::saveArgsInLocalArray(
         }
         slot += entry.slots;
     }
-    //TODO Copy values from the stack to the local array here.
+    
+    for(; index<_paramTable->getParamCount(); index++){
+        ParamTableEntry entry;
+        MJIT_ASSERT(_logFileFP, _paramTable->getEntry(index, &entry), "Bad index for table entry");
+        uintptr_t offset = entry.offset;
+        //Our linkage templates for loading from the stack assume that the offset will always be less than 0xff.
+        //  This is however not always true for valid code. If this becomes a problem in the future we will
+        //  have to add support for larger offsets by creating new templates that use 2 byte offsets from rsp.
+        //  Whether that will be a change to the current tempaltes, or new templates with supporting code
+        //  is a decision yet to be determined.
+        MJIT_ASSERT(_logFileFP, (offset + stack_alloc_space) < uintptr_t(0xff), "Offset too large, add support for larger offsets");
+        COPY_TEMPLATE(buffer, movRSPOffsetR11, saveSize);
+        patchImm1(buffer, (U_8)(offset+stack_alloc_space));
+        COPY_TEMPLATE(buffer, saveR11Local, saveSize);
+        patchImm4(buffer, (U_32)((slot*8) & BIT_MASK_32));
+        slot += entry.slots;
+    }
     return saveSize;
 }
 
@@ -597,10 +676,11 @@ MJIT::CodeGenerator::saveArgsOnStack(
     U_16 offset = _paramTable->getTotalParamSize();
     RealRegister::RegNum regNum = RealRegister::NoReg;
     for(int i=0; i<_paramTable->getParamCount(); i++){
-        ParamTableEntry entry = _paramTable->getEntry(i);
+        ParamTableEntry entry;
+        MJIT_ASSERT(_logFileFP, _paramTable->getEntry(i, &entry), "Bad index for table entry");
         if(entry.onStack)
             break;
-        int regNum = (int)entry.address;
+        int32_t regNum = entry.regNo;
         switch(regNum){
             case RealRegister::xmm0:
                 COPY_TEMPLATE(buffer, saveXMM0Offset, saveArgsSize);
@@ -667,10 +747,11 @@ MJIT::CodeGenerator::loadArgsFromStack(
     buffer_size_t argLoadSize = 0;
     RealRegister::RegNum regNum = RealRegister::NoReg;
     for(int i=0; i<_paramTable->getParamCount(); i++){
-        ParamTableEntry entry = _paramTable->getEntry(i);
+        ParamTableEntry entry;
+        MJIT_ASSERT(_logFileFP, _paramTable->getEntry(i, &entry), "Bad index for table entry");
         if(entry.onStack)
             break;
-        int regNum = (int)entry.address;
+        int32_t regNum = entry.regNo;
         switch(regNum){
             case RealRegister::xmm0:
                 COPY_TEMPLATE(buffer, loadXMM0Offset, argLoadSize);
@@ -1137,7 +1218,7 @@ MJIT::CodeGenerator::generatePrologue(
     COPY_TEMPLATE(buffer, movR10R14, prologueSize);
 
     // Move parameters to where the method body will expect to find them
-    buffer_size_t saveSize = saveArgsInLocalArray(buffer);
+    buffer_size_t saveSize = saveArgsInLocalArray(buffer, _stackPeakSize);
     prologueSize += saveSize;
     if (!saveSize) return 0;
     
@@ -1216,6 +1297,7 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                     buffer += loadSize;
                     codeGenSize += loadSize;
                 } else {
+                    trfprintf(_logFileFP, "Unsupported load bytecode %d\n", bc);
                     return 0;
                 }
                 break;
@@ -1264,23 +1346,31 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                     buffer += loadSize;
                     codeGenSize += loadSize;
                 } else {
+                    trfprintf(_logFileFP, "Unsupported store bytecode %d\n", bc);
                     return 0;
                 }
                 break;
+            case TR_J9ByteCode::J9BCgetfield:
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgetfield\n");
+                U_16 index = bci->next2Bytes();
+                COPY_TEMPLATE(buffer, getFieldTemplatePrologue, codeGenSize);
+                patchImm4(buffer, ((U_32)index)*8);
+                COPY_TEMPLATE(buffer, getFieldTemplate, codeGenSize);
+                break;
             case TR_J9ByteCode::J9BCiadd:
-                trfprintf(_logFileFP, "J9BCiadd\n");
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCiadd\n");
                 COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCisub:
-                trfprintf(_logFileFP, "J9BCisub\n");
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCisub\n");
                 COPY_TEMPLATE(buffer, iSubTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCimul:
-                trfprintf(_logFileFP, "J9BCimul\n");
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCimul\n");
                 COPY_TEMPLATE(buffer, iMulTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCidiv:
-                trfprintf(_logFileFP, "J9BCidiv\n");
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCidiv\n");
                 COPY_TEMPLATE(buffer, iDivTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCladd:
@@ -1288,10 +1378,10 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
                 break;
             case TR_J9ByteCode::J9BCgenericReturn:
-                trfprintf(_logFileFP, "J9BCgenericReturn\n");
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgenericReturn\n");
                 if(method->returnType() == TR::Int32)
                 {
-                    trfprintf(_logFileFP, "Return type : Int32\n"); 
+                    MJIT_DEBUG_BC_LOG(_logFileFP, "Return type : Int32\n"); 
                     buffer_size_t epilogueSize = generateEpologue(buffer);
                     buffer += epilogueSize;
                     codeGenSize += epilogueSize;
@@ -1328,43 +1418,43 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
         GenerateTemplate:
             COPY_TEMPLATE(buffer, loadTemplatePrologue, loadSize);
             patchImm4(buffer, (U_32)(index*8));
-            COPY_TEMPLATE(buffer, vLoadTemplate, loadSize);
+            COPY_TEMPLATE(buffer, loadTemplate, loadSize);
             break;
 		case TR_J9ByteCode::J9BClload0:
 		case TR_J9ByteCode::J9BCfload0:
 		case TR_J9ByteCode::J9BCdload0:
         case TR_J9ByteCode::J9BCiload0:
+		case TR_J9ByteCode::J9BCaload0:
             index = 0;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload1:
         case TR_J9ByteCode::J9BCfload1:
         case TR_J9ByteCode::J9BCdload1:
         case TR_J9ByteCode::J9BCiload1:
+		case TR_J9ByteCode::J9BCaload1:
             index = 1;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload2:
         case TR_J9ByteCode::J9BCfload2:
         case TR_J9ByteCode::J9BCdload2:
         case TR_J9ByteCode::J9BCiload2:
+		case TR_J9ByteCode::J9BCaload2:
             index = 2;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload3:
         case TR_J9ByteCode::J9BCfload3:
         case TR_J9ByteCode::J9BCdload3:
         case TR_J9ByteCode::J9BCiload3:
+		case TR_J9ByteCode::J9BCaload3:
             index = 3;
             goto GenerateTemplate;
 		case TR_J9ByteCode::J9BClload:
 		case TR_J9ByteCode::J9BCfload:
 		case TR_J9ByteCode::J9BCdload:
 		case TR_J9ByteCode::J9BCiload:
+		case TR_J9ByteCode::J9BCaload:
             index = bci->nextByte();
             goto GenerateTemplate;
-		//case TR_J9ByteCode::ALOAD
-		//case TR_J9ByteCode::ALOAD_0
-		//case TR_J9ByteCode::ALOAD_1
-		//case TR_J9ByteCode::ALOAD_2
-		//case TR_J9ByteCode::ALOAD_3
     }
     return loadSize;
 }
@@ -1377,7 +1467,6 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
     buffer_size_t storeSize = 0;
     switch(bc) {
         GenerateTemplate:
-            COPY_TEMPLATE(buffer, vStoreTemplatePrologue, storeSize);
             COPY_TEMPLATE(buffer, storeTemplate, storeSize);
             patchImm4(buffer, (U_32)(index*8));
             break;
@@ -1385,37 +1474,37 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
 		case TR_J9ByteCode::J9BCfstore0:
 		case TR_J9ByteCode::J9BCdstore0:
         case TR_J9ByteCode::J9BCistore0:
+        case TR_J9ByteCode::J9BCastore0:
             index = 0;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClstore1:
         case TR_J9ByteCode::J9BCfstore1:
         case TR_J9ByteCode::J9BCdstore1:
         case TR_J9ByteCode::J9BCistore1:
+        case TR_J9ByteCode::J9BCastore1:
             index = 1;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClstore2:
         case TR_J9ByteCode::J9BCfstore2:
         case TR_J9ByteCode::J9BCdstore2:
         case TR_J9ByteCode::J9BCistore2:
+        case TR_J9ByteCode::J9BCastore2:
             index = 2;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClstore3:
         case TR_J9ByteCode::J9BCfstore3:
         case TR_J9ByteCode::J9BCdstore3:
         case TR_J9ByteCode::J9BCistore3:
+        case TR_J9ByteCode::J9BCastore3:
             index = 3;
             goto GenerateTemplate;
 		case TR_J9ByteCode::J9BClstore:
 		case TR_J9ByteCode::J9BCfstore:
 		case TR_J9ByteCode::J9BCdstore:
 		case TR_J9ByteCode::J9BCistore:
+		case TR_J9ByteCode::J9BCastore:
             index = bci->nextByte();
             goto GenerateTemplate;
-		//case TR_J9ByteCode::ALOAD
-		//case TR_J9ByteCode::ALOAD_0
-		//case TR_J9ByteCode::ALOAD_1
-		//case TR_J9ByteCode::ALOAD_2
-		//case TR_J9ByteCode::ALOAD_3
     }
     return storeSize;
 }

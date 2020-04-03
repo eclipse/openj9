@@ -54,6 +54,14 @@ template_start saveRCXLocal
     mov [r14 + 0xefbeadde], rcx
 template_end saveRCXLocal
 
+template_start saveR11Local
+    mov [r14 + 0xefbeadde], r11
+template_end saveR11Local
+
+template_start movRSPOffsetR11
+    mov r11, [rsp+0xff]; Used ff as all other labels look valid and 255 will be rare.
+template_end movRSPOffsetR11
+
 template_start movRSPR10
     mov r10, rsp; Used for allocating space on the stack.
 template_end movRSPR10

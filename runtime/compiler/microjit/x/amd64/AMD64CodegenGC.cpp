@@ -48,13 +48,59 @@
 #include "infra/IGNode.hpp"
 #include "infra/InterferenceGraph.hpp"
 #include "infra/List.hpp"
+#include "microjit/utils.hpp"
+#include "microjit/x/amd64/AMD64Codegen.hpp"
 #include "ras/Debug.hpp"
 
 TR::GCStackAtlas*
-MJIT::CodeGenGC::createStackAtlas(TR::Compilation *comp)
+MJIT::CodeGenGC::createStackAtlas(TR::Compilation *comp, ParamTable *paramTable, LocalTable *localTable)
    {
    //remove before attempting to use function
    TR::GCStackAtlas * atlas = NULL;
+
+   // --------------------------------------------------------------------------------
+   // Construct the parameter map for mapped reference parameters
+   //
+   intptrj_t stackSlotSize = TR::Compiler->om.sizeofReferenceAddress();
+   U_16 paramCount = paramTable->getParamCount();
+   U_16 ParamSlots = paramTable->getTotalParamSize()/stackSlotSize;
+   TR_GCStackMap *parameterMap = new (comp->trHeapMemory(), paramCount) TR_GCStackMap(paramCount);
+
+   int32_t firstMappedParmOffsetInBytes = -1;
+   for(int i=0; i<paramCount; i++){
+      ParamTableEntry entry;
+      MJIT_ASSERT(_logFileFP, paramTable->getEntry(i, &entry), "Bad index for table entry");
+      if(entry.isReference){
+         firstMappedParmOffsetInBytes = entry.offset;
+         break;
+      }
+   }
+
+   firstMappedParmOffsetInBytes = 
+      (firstMappedParmOffsetInBytes >= 0) ? firstMappedParmOffsetInBytes : 0;
+
+   for(int i=0; i<paramCount; i++){
+      ParamTableEntry entry;
+      MJIT_ASSERT(_logFileFP, paramTable->getEntry(i, &entry), "Bad index for table entry");
+      if(entry.isReference){
+         int32_t entryOffsetInBytes = entry.offset;
+         parameterMap->setBit(((entryOffsetInBytes-firstMappedParmOffsetInBytes)/stackSlotSize));
+         if(!entry.onStack){
+            parameterMap->setRegisterBits(TR::RealRegister::gprMask((TR::RealRegister::RegNum)entry.regNo));
+         }
+      }
+   }
+
+   // --------------------------------------------------------------------------------
+   // Construct the local map for mapped reference locals
+   //
+   U_16 localCount = localTable->getLocalCount();
+   TR_GCStackMap *localMap = new (comp->trHeapMemory(), localCount) TR_GCStackMap(localCount);
+
+   for(int i=0; i<localCount; i++){
+      
+   }
+
 
    /*
    // Assign a GC map index to each reference parameter and each reference local.
@@ -82,11 +128,6 @@ MJIT::CodeGenGC::createStackAtlas(TR::Compilation *comp)
    TR_ASSERT(numParmSlots >= 0, "numParmSlots must be positive or 0");
 
    // --------------------------------------------------------------------------------
-   // Construct the parameter map for mapped reference parameters
-   //
-   TR_GCStackMap *parameterMap = new (comp->trHeapMemory(), numParmSlots) TR_GCStackMap(numParmSlots);
-
-   // --------------------------------------------------------------------------------
    // Now assign GC map indices to parameters depending on the linkage mapping.
    // At the same time populate the parameter map.
    //
@@ -108,22 +149,18 @@ MJIT::CodeGenGC::createStackAtlas(TR::Compilation *comp)
           parmCursor->isCollectedReference())
          {
          parmOffsetInBytes = parmCursor->getParameterOffset();
-         if (!_bodyLinkage->getRightToLeft())
-            {
-            parmOffsetInBytes = sizeOfParameterAreaInBytes - parmOffsetInBytes - stackSlotSize;
-            }
 
          // Normalize the parameter offset on the stack to a zero-based index
          // into the GC map.
          //
-         slotIndex = (parmOffsetInBytes-firstMappedParmOffsetInBytes)/stackSlotSize;
+         slotIndex = ;
          parmCursor->setGCMapIndex(slotIndex);
 
          if (parmCursor->getLinkageRegisterIndex()<0 ||
              parmCursor->getAssignedGlobalRegisterIndex()<0 ||
              _bodyLinkage->hasToBeOnStack(parmCursor))
             {
-            parameterMap->setBit(slotIndex);
+            parameterMap->setBit(((parmOffsetInBytes-firstMappedParmOffsetInBytes)/stackSlotSize));
             }
          }
       }

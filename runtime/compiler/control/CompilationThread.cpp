@@ -9012,15 +9012,19 @@ TR::CompilationInfoPerThreadBase::mjit(
          MJIT::ParamTableEntry paramTableEntries[paramCount];
 
          int error_code = 0;
-         MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, maxLength, &error_code, paramTableEntries, paramCount);
+         MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, maxLength, &error_code, paramTableEntries, paramCount, logFileFP);
          if(error_code)
             MJIT_COMPILE_ERROR(0, method);
-         
+      
          MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
+
+         U_16 localCount = 0;
+         MJIT::LocalTableEntry* localTableEntries = NULL;
+         MJIT::LocalTable localTable(localTableEntries, localCount);
 
 #define MAX_BUFFER_SIZE 1024
          // zeroed buffer for generated code
-         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, this->getCompilation()->getOutFile(), vm, &paramTable);
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable);
          char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          memset(buffer, 0, MAX_BUFFER_SIZE);
 
