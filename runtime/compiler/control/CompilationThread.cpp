@@ -8972,6 +8972,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
    TR_MethodMetaData* metaData = NULL;
    J9Method *method = NULL;
+   TR::CodeCache* codeCache  = NULL;
 
    if (_methodBeingCompiled->_priority >= CP_SYNC_MIN)
       ++_compInfo._numSyncCompilations;
@@ -9027,8 +9028,8 @@ TR::CompilationInfoPerThreadBase::mjit(
          MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable);
          char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          memset(buffer, 0, MAX_BUFFER_SIZE);
+         codeCache = mjit_cg.getCodeCache();
 
-         // current byte in buffer
          // provide enough space for CodeCacheMethodHeader
          char* cursor = &buffer[sizeof(OMR::CodeCacheMethodHeader)];
 
@@ -9226,6 +9227,10 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          printCompFailureInfo(compiler, exceptionName);
          processException(vmThread, scratchSegmentProvider, compiler, haveLockedClassUnloadMonitor, exceptionName);
+         if(codeCache)
+            {
+            TR::CodeCacheManager::instance()->unreserveCodeCache(codeCache);
+            }
          metaData = 0;
          }
 

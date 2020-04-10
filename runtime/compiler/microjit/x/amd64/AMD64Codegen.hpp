@@ -444,6 +444,11 @@ class CodeGenerator {
             TR_J9VMBase *vmBase,
             J9VMThread *vmThread
         );
+
+        /**
+         * Get the code cache 
+         */
+        TR::CodeCache* getCodeCache();
 };
 
 class MJITCompilationFailure: public virtual std::exception

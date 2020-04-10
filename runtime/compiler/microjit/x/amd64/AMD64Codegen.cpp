@@ -1532,6 +1532,11 @@ MJIT::CodeGenerator::generateDebugBreakpoint(char* buffer) {
     return codeGenSize;
 }
 
+TR::CodeCache*
+MJIT::CodeGenerator::getCodeCache(){ 
+    return _codeCache; 
+}
+
 U_8 *
 MJIT::CodeGenerator::allocateCodeCache(int32_t length, TR_J9VMBase *vmBase, J9VMThread *vmThread)
    {
