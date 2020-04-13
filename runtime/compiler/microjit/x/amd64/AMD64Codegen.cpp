@@ -435,8 +435,11 @@ MJIT::mapIncomingParams(
 #endif
         //3rd index of typeString is first param.
         char typeChar = typeString[i+3];
-        U_16 size = typeSignatureSize(typeChar);
-        U_16 currentOffset = calculateOffset(&stack);
+        U_16 size = MJIT::typeSignatureSize(typeChar);
+        if(typeChar == MJIT::LONG_TYPE_CHARACTER && i == paramCount - 1){
+            // TR requires last argument of type long uses 1 slot!
+            size = 8;
+        }
 #ifdef MJIT_DEBUG_MAP_PARAMS
         trfprintf(logFileFP, "    ParamTableSize: %04x\n", size);
 #endif
