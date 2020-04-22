@@ -303,6 +303,7 @@ class CodeGenerator {
         TR::CodeCache *_codeCache;
         int32_t _stackPeakSize;
         ParamTable* _paramTable;
+        TR::Compilation* _comp;
 
         buffer_size_t generateSwitchToInterpPrePrologue(
             char*,
@@ -353,6 +354,7 @@ class CodeGenerator {
          * @param buffer         code buffer
          * @param method         method for introspection
          * @param bc             Bytecode that generated the load instruction
+         * @param bci            Bytecode iterator from which the bytecode was retreived
          * @return               size of generated code; 0 if method failed
          */
         buffer_size_t
@@ -363,9 +365,52 @@ class CodeGenerator {
             TR_J9ByteCodeIterator* bci
         );
 
+        /**
+         * Generates a store instruction based on the type.
+         *
+         * @param buffer         code buffer
+         * @param method         method for introspection
+         * @param bci            Bytecode iterator from which the bytecode was retreived
+         * @return               size of generated code; 0 if method failed
+         */
+        buffer_size_t
+        generatePutStatic(
+            char* buffer, 
+            TR_ResolvedMethod* method, 
+            TR_J9ByteCodeIterator* bci
+        );
+
+        /**
+         * Generates a store instruction based on the type.
+         *
+         * @param buffer         code buffer
+         * @param method         method for introspection
+         * @param bci            Bytecode iterator from which the bytecode was retreived
+         * @return               size of generated code; 0 if method failed
+         */
+        buffer_size_t
+        generateGetStatic(
+            char* buffer, 
+            TR_ResolvedMethod* method, 
+            TR_J9ByteCodeIterator* bci
+        );
+
+        /**
+         * Generates a return instruction based on the type.
+         * 
+         * @param buffer        code buffer
+         * @param dt            The data type to be returned by the TR-compiled method
+         * @return              size of generated code; 0 if method failed
+         */
+        buffer_size_t
+        generateReturn(
+            char* buffer, 
+            TR::DataType dt
+        );
+
     public:
         CodeGenerator() = delete;
-        CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*);
+        CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*, TR::Compilation*);
 
         inline void 
         setPeakStackSize(int32_t newSize)

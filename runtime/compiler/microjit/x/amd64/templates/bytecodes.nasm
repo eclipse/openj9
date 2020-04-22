@@ -1,23 +1,24 @@
 ; add all labels to global list if intending to use in CodeGenerator
 %include "utils.nasm"
 
-; rsp: 
-;   is the stack extent for the java value stack pointer.
-; r10:
-;   will hold the java value stack pointer.
-; r11:
-;   stores the accumulator or- 
-;   stores a pointer to an object
-; r12:
-;   stores any value which will act on the accumulator or
-;   stores the value to be written to an object field or
-;   stores the value read from an object field 
-; r13:
-;   will hold the java reference stack pointer
-; r14:
-;   will hold a pointer to the start of the local array
-; r15:
-;   stores values loaded from memory for storing on the stack
+;MicroJIT Virtual Machine to X86-64 mapping
+;  rsp: 
+;    is the stack extent for the java value stack pointer.
+;  r10:
+;    will hold the java value stack pointer.
+;  r11:
+;    stores the accumulator, or
+;    stores a pointer to an object
+;  r12:
+;    stores any value which will act on the accumulator, or
+;    stores the value to be written to an object field, or
+;    stores the value read from an object field
+;  r13:
+;    holds addresses for absolute addressing
+;  r14:
+;    will hold a pointer to the start of the local array
+;  r15:
+;    stores values loaded from memory for storing on the stack
 
 ; used to solve intial problem static add(II)I
 template_start addAndReturn
@@ -57,6 +58,22 @@ template_start getFieldTemplate
     mov [r10], r12
 template_end getFieldTemplate
 
+template_start staticTemplatePrologue
+    lea r13, [0xefbeadde]   ; load the absolute address of a static value
+template_end staticTemplatePrologue
+
+template_start getStaticTemplate
+    sub r10, 8      ; allocate a stack slot
+    mov r11, [r13]  ; load value into r11
+    mov [r10], r11  ; move it onto the stack
+template_end getStaticTemplate
+
+template_start putStaticTemplate
+    mov r11, [r10]  ; Move stack value into r11
+    add r10, 8      ; Pop the value off the stack
+    mov [r13], r11  ; Move it to memory
+template_end putStaticTemplate
+
 template_start iAddTemplate
     mov r11, [r10]  ; pop first value off java stack into the accumulator
     add r10, 8      ; which means reducing the stack size by 1 slot (8 bytes)
@@ -69,3 +86,7 @@ template_start iReturnTemplate
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
     ret             ; return from the JITed method.
 template_end iReturnTemplate
+
+template_start vReturnTemplate
+    ret             ; return from the JITed method.
+template_end vReturnTemplate

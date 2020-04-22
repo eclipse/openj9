@@ -9025,7 +9025,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
 #define MAX_BUFFER_SIZE 1024
          // zeroed buffer for generated code
-         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable);
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler);
          char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          memset(buffer, 0, MAX_BUFFER_SIZE);
          codeCache = mjit_cg.getCodeCache();

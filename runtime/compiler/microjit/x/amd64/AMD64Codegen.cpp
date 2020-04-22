@@ -24,10 +24,10 @@
 #endif
 #ifdef MJIT_DEBUG 
 #define MJIT_DEBUG_BC_WALKING 1
-#define MJIT_DEBUG_BC_LOG (logFile, text) trfprintf(logFile, text)
+#define MJIT_DEBUG_BC_LOG(logFile, text) trfprintf(logFile, text)
 #else 
 #undef MJIT_DEBUG_BC_WALKING 
-#define MJIT_DEBUG_BC_LOG (logFile, text) do {} while(0)
+#define MJIT_DEBUG_BC_LOG(logFile, text) do {} while(0)
 #endif
 
 #define STACKCHECKBUFFER 512
@@ -172,11 +172,15 @@ DECLARE_TEMPLATE(loadTemplate);
 DECLARE_TEMPLATE(storeTemplate);
 DECLARE_TEMPLATE(getFieldTemplatePrologue);
 DECLARE_TEMPLATE(getFieldTemplate);
+DECLARE_TEMPLATE(staticTemplatePrologue);
+DECLARE_TEMPLATE(getStaticTemplate);
+DECLARE_TEMPLATE(putStaticTemplate);
 DECLARE_TEMPLATE(iAddTemplate);
 DECLARE_TEMPLATE(iSubTemplate);
 DECLARE_TEMPLATE(iMulTemplate);
 DECLARE_TEMPLATE(iDivTemplate);
 DECLARE_TEMPLATE(iReturnTemplate);
+DECLARE_TEMPLATE(vReturnTemplate);
 
 static void 
 debug_print_hex(char* buffer, unsigned long long size)
@@ -812,13 +816,20 @@ MJIT::CodeGenerator::loadArgsFromStack(
     return argLoadSize;
 }
 
-MJIT::CodeGenerator::CodeGenerator(J9MicroJITConfig* config, J9VMThread* thread, TR::FilePointer* fp, TR_J9VMBase& vm, ParamTable* paramTable)
-    :_linkage(Linkage(config, thread, fp))
+MJIT::CodeGenerator::CodeGenerator(
+    J9MicroJITConfig* config, 
+    J9VMThread* thread, 
+    TR::FilePointer* fp, 
+    TR_J9VMBase& vm, 
+    ParamTable* paramTable,
+    TR::Compilation* comp
+    ):_linkage(Linkage(config, thread, fp))
     ,_logFileFP(fp)
     ,_vm(vm)
     ,_codeCache(NULL)
     ,_stackPeakSize(0)
     ,_paramTable(paramTable)
+    ,_comp(comp)
 {
     _linkage._properties.setOutgoingArgAlignment(lcm(16, _vm.getLocalObjectAlignmentInBytes()));
 }
@@ -1038,8 +1049,8 @@ MJIT::CodeGenerator::generatePrologue(
     //Max amount of data to be preserved. It is overkill, but as long as the prologue/epilogue save/load everything
     //  it is a workable solution for now. Later try to determine what registers need to be preserved ahead of time.
     U_32 preservedRegsSize = properties._numPreservedRegisters * properties.getPointerSize();
-    const int32_t localSize = (romMethod->argCount + romMethod->tempCount)*8;
     const int32_t pointerSize = properties.getPointerSize();
+    const int32_t localSize = (romMethod->argCount + romMethod->tempCount)*pointerSize;
     MJIT_ASSERT(_logFileFP, localSize >= 0, "assertion failure");
     int32_t frameSize = localSize + preservedRegsSize + ( _linkage._properties.getReservesOutgoingArgsInPrologue() ? properties.getPointerSize() : 0 );
     uint32_t stackSize = frameSize + properties.getRetAddressWidth();
@@ -1252,6 +1263,7 @@ case TR_J9ByteCode::byteCodeCaseType
 buffer_size_t 
 MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci){
     buffer_size_t codeGenSize = 0;
+    buffer_size_t calledCGSize = 0;
     for(TR_J9ByteCode bc = bci->first(); bc != J9BCunknown; bc = bci->next())
     {
         switch(bc) {
@@ -1296,9 +1308,9 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
 		    loadCasePrologue(J9BCdload):
 		    loadCaseBody(J9BCdload);
             GenericLoadCall:
-                if(buffer_size_t loadSize = generateLoad(buffer, method, bc, bci)){
-                    buffer += loadSize;
-                    codeGenSize += loadSize;
+                if(calledCGSize = generateLoad(buffer, method, bc, bci)){
+                    buffer += calledCGSize;
+                    codeGenSize += calledCGSize;
                 } else {
                     trfprintf(_logFileFP, "Unsupported load bytecode %d\n", bc);
                     return 0;
@@ -1345,9 +1357,9 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
 		    storeCasePrologue(J9BCdstore):
 		    storeCaseBody(J9BCdstore);
             GenericStoreCall:
-                if(buffer_size_t loadSize = generateStore(buffer, method, bc, bci)){
-                    buffer += loadSize;
-                    codeGenSize += loadSize;
+                if(calledCGSize = generateStore(buffer, method, bc, bci)){
+                    buffer += calledCGSize;
+                    codeGenSize += calledCGSize;
                 } else {
                     trfprintf(_logFileFP, "Unsupported store bytecode %d\n", bc);
                     return 0;
@@ -1355,10 +1367,29 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 break;
             case TR_J9ByteCode::J9BCgetfield:
                 MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgetfield\n");
-                U_16 index = bci->next2Bytes();
                 COPY_TEMPLATE(buffer, getFieldTemplatePrologue, codeGenSize);
-                patchImm4(buffer, ((U_32)index)*8);
+                patchImm4(buffer, ((U_32)(bci->next2Bytes()))*8);
                 COPY_TEMPLATE(buffer, getFieldTemplate, codeGenSize);
+                break;
+            case TR_J9ByteCode::J9BCgetstatic:
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgetstatic\n");
+                if(calledCGSize = generateGetStatic(buffer, method, bci)){
+                    buffer += calledCGSize;
+                    codeGenSize += calledCGSize;
+                } else {
+                    trfprintf(_logFileFP, "Unsupported getstatic bytecode %d\n", bc);
+                    return 0;
+                }
+                break;
+            case TR_J9ByteCode::J9BCputstatic:
+                MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCputstatic\n");
+                if(calledCGSize = generatePutStatic(buffer, method, bci)){
+                    buffer += calledCGSize;
+                    codeGenSize += calledCGSize;
+                } else {
+                    trfprintf(_logFileFP, "Unsupported putstatic bytecode %d\n", bc);
+                    return 0;
+                }
                 break;
             case TR_J9ByteCode::J9BCiadd:
                 MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCiadd\n");
@@ -1382,13 +1413,10 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 break;
             case TR_J9ByteCode::J9BCgenericReturn:
                 MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgenericReturn\n");
-                if(method->returnType() == TR::Int32)
+                if(calledCGSize = generateReturn(buffer, method->returnType()))
                 {
-                    MJIT_DEBUG_BC_LOG(_logFileFP, "Return type : Int32\n"); 
-                    buffer_size_t epilogueSize = generateEpologue(buffer);
-                    buffer += epilogueSize;
-                    codeGenSize += epilogueSize;
-                    COPY_TEMPLATE(buffer, iReturnTemplate, codeGenSize);                
+                    buffer += calledCGSize;
+                    codeGenSize += calledCGSize;               
                 }
                 else if(method->returnType() == TR::Int64)
                 {
@@ -1400,7 +1428,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 }
                 else
                 {
-                    trfprintf(_logFileFP, "Unknown Return type: %d\n", method->returnType());                    
+                    trfprintf(_logFileFP, "Unknown Return type: %d\n", method->returnType());
+                    return 0;                  
                 }
                 break;
             default:
@@ -1409,6 +1438,35 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
         }
     }
     return codeGenSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateReturn(char* buffer, TR::DataType dt)
+{
+    buffer_size_t returnSize = 0;
+    buffer_size_t calledCGSize = 0;
+    switch(dt){
+        case TR::Int32:
+        case TR::Int64:
+            calledCGSize = generateEpologue(buffer);
+            buffer += calledCGSize;
+            returnSize += calledCGSize;
+            COPY_TEMPLATE(buffer, iReturnTemplate, returnSize); 
+            break;
+        case TR::NoType:
+            calledCGSize = generateEpologue(buffer);
+            buffer += calledCGSize;
+            returnSize += calledCGSize;
+            COPY_TEMPLATE(buffer, vReturnTemplate, returnSize); 
+            break;
+        case TR::Int8:
+        case TR::Int16:
+        case TR::Float:
+        case TR::Double:
+        case TR::Address:
+            break;
+    }
+    return returnSize;
 }
 
 buffer_size_t
@@ -1510,6 +1568,54 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
             goto GenerateTemplate;
     }
     return storeSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateGetStatic(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci)
+{
+    buffer_size_t getStaticSize = 0;
+    int32_t cpIndex = (int32_t)bci->next2Bytes();
+
+    //Attempt to resolve the address at compile time. This can fail, and if it does we must fail the compilation for now.
+    //In the future research project we could attempt runtime resolution. TR does this with self modifying code.
+    void * dataAddress;
+    //These are all from TR and likely have implications on how we use this address. However, we do not know that as of yet.
+    TR::DataType type = TR::NoType;
+    bool isVolatile, isFinal, isPrivate, isUnresolvedInCP;
+    bool resolved = method->staticAttributes(_comp, cpIndex, &dataAddress, &type, &isVolatile, &isFinal, &isPrivate, false, &isUnresolvedInCP);
+    if(!resolved) return 0;
+
+    //Generate template and instantiate immediate values
+    COPY_TEMPLATE(buffer, staticTemplatePrologue, getStaticSize);
+    MJIT_ASSERT(_logFileFP, (U_64)dataAddress <= 0x00000000ffffffff, "data is above 4-byte boundary");
+    patchImm4(buffer, (U_32)((U_64)dataAddress & 0x00000000ffffffff));
+    COPY_TEMPLATE(buffer, getStaticTemplate, getStaticSize);
+
+    return getStaticSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generatePutStatic(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci)
+{
+    buffer_size_t putStaticSize = 0;
+    int32_t cpIndex = (int32_t)bci->next2Bytes();
+
+    //Attempt to resolve the address at compile time. This can fail, and if it does we must fail the compilation for now.
+    //In the future research project we could attempt runtime resolution. TR does this with self modifying code.
+    void * dataAddress;
+    //These are all from TR and likely have implications on how we use this address. However, we do not know that as of yet.
+    TR::DataType type = TR::NoType;
+    bool isVolatile, isFinal, isPrivate, isUnresolvedInCP;
+    bool resolved = method->staticAttributes(_comp, cpIndex, &dataAddress, &type, &isVolatile, &isFinal, &isPrivate, true, &isUnresolvedInCP);
+    if(!resolved) return 0;
+
+    //Generate template and instantiate immediate values
+    COPY_TEMPLATE(buffer, staticTemplatePrologue, putStaticSize);
+    MJIT_ASSERT(_logFileFP, (U_64)dataAddress <= 0x00000000ffffffff, "data is above 4-byte boundary");
+    patchImm4(buffer, (U_32)((U_64)dataAddress & 0x00000000ffffffff));
+    COPY_TEMPLATE(buffer, putStaticTemplate, putStaticSize);
+    
+    return putStaticSize;
 }
 
 buffer_size_t
