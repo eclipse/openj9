@@ -1411,6 +1411,14 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
                 trfprintf(_logFileFP, "J9BCladd\n");
                 COPY_TEMPLATE(buffer, iAddTemplate, codeGenSize);
                 break;
+            case TR_J9ByteCode::J9BClsub:
+                trfprintf(_logFileFP, "J9BClsub\n");
+                COPY_TEMPLATE(buffer, iSubTemplate, codeGenSize);
+                break;
+            case TR_J9ByteCode::J9BClmul:
+                trfprintf(_logFileFP, "J9BClmul\n");
+                COPY_TEMPLATE(buffer, iMulTemplate, codeGenSize);
+                break;
             case TR_J9ByteCode::J9BCgenericReturn:
                 MJIT_DEBUG_BC_LOG(_logFileFP, "J9BCgenericReturn\n");
                 if(calledCGSize = generateReturn(buffer, method->returnType()))
