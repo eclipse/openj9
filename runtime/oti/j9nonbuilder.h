@@ -1052,6 +1052,7 @@ typedef struct J9SharedClassJavacoreDataDescriptor {
 	UDATA aotThunkDataBytes;
 	UDATA indexedDataBytes;
 	UDATA unindexedDataBytes;
+	UDATA crvSnippetBytes;
 	UDATA numROMClasses;
 	UDATA numStaleClasses;
 	UDATA percStale;
@@ -1070,6 +1071,7 @@ typedef struct J9SharedClassJavacoreDataDescriptor {
 	UDATA numObjects;
 	UDATA numStartupHints;
 	UDATA startupHintBytes;
+	UDATA numCRVSnippets;
 } J9SharedClassJavacoreDataDescriptor;
 
 typedef struct J9SharedStringFarm {
@@ -1847,6 +1849,7 @@ typedef struct J9BytecodeVerificationData {
 	struct J9PortLibrary * portLib;
 	struct J9JavaVM* javaVM;
 	BOOLEAN createdStackMap;
+	struct J9HashTable* classRelationshipSnippetsHashTable;
 } J9BytecodeVerificationData;
 
 /* @ddr_namespace: map_to_type=J9NativeLibrary */

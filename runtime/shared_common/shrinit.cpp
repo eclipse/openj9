@@ -922,6 +922,9 @@ parseArgs(J9JavaVM* vm, char* options, U_64* runtimeFlags, UDATA* verboseFlags, 
 		         } else if ((filterLength == sizeof(SUB_OPTION_PRINTSTATS_STARTUPHINT))
 		        		 && (0 != try_scan(&filter, SUB_OPTION_PRINTSTATS_STARTUPHINT))) {
 		        	  *printStatsOptions |= PRINTSTATS_SHOW_STARTUPHINT;
+				 } else if ((filterLength == sizeof(SUB_OPTION_PRINTSTATS_CRVSNIPPET))
+		        		 && (0 != try_scan(&filter, SUB_OPTION_PRINTSTATS_CRVSNIPPET))) {
+		        	  *printStatsOptions |= PRINTSTATS_SHOW_CRVSNIPPET;
 		         /* -Xshareclasses:printallstats=<private options> For private options, it is default to print details. */
 		         } else if ((filterLength == sizeof(SUB_OPTION_PRINTSTATS_EXTRA))
 		        		 && (0 != try_scan(&filter, SUB_OPTION_PRINTSTATS_EXTRA))) {
@@ -1261,6 +1264,12 @@ j9shr_dump_help(J9JavaVM* vm, UDATA more)
 	j9file_printf(PORTLIB, J9PORT_TTY_OUT, "%s", tmpcstr);
 
 	tmpcstr = j9nls_lookup_message((J9NLS_INFO | J9NLS_DO_NOT_PRINT_MESSAGE_TAG), J9NLS_EXELIB_INTERNAL_HELP_XXDISABLEUSEGCSTARTUPHINTS, NULL);
+	j9file_printf(PORTLIB, J9PORT_TTY_OUT, "%s", tmpcstr);
+
+	tmpcstr = j9nls_lookup_message((J9NLS_INFO | J9NLS_DO_NOT_PRINT_MESSAGE_TAG), J9NLS_EXELIB_INTERNAL_HELP_XXCLASSRELATIONSHIPVERIFIER, NULL);
+	j9file_printf(PORTLIB, J9PORT_TTY_OUT, "%s", tmpcstr);
+
+	tmpcstr = j9nls_lookup_message((J9NLS_INFO | J9NLS_DO_NOT_PRINT_MESSAGE_TAG), J9NLS_EXELIB_INTERNAL_HELP_XXCLASSRELATIONSHIPVERIFIERIGNORESCC, NULL);
 	j9file_printf(PORTLIB, J9PORT_TTY_OUT, "%s", tmpcstr);
 
 	j9file_printf(PORTLIB, J9PORT_TTY_OUT, "\n\n");
@@ -2451,6 +2460,7 @@ static void j9shr_printStats_dump_help(J9JavaVM* vm, bool moreHelp, UDATA comman
 	SHRINIT_TRACE_NOTAG(1, J9NLS_SHRC_SHRINIT_HELPTEXT_PRINTSTATS_ZIPCACHE);
 	SHRINIT_TRACE_NOTAG(1, J9NLS_SHRC_SHRINIT_HELPTEXT_PRINTSTATS_STALE);
 	SHRINIT_TRACE_NOTAG(1, J9NLS_SHRC_SHRINIT_HELPTEXT_PRINTSTATS_STARTUPHINT);
+	SHRINIT_TRACE_NOTAG(1, J9NLS_SHRC_SHRINIT_HELPTEXT_PRINTSTATS_CRVSNIPPET);
 	j9tty_printf(PORTLIB, "\n");
 	if (moreHelp) {
 		SHRINIT_TRACE_NOTAG(1, J9NLS_SHRC_SHRINIT_HELPTEXT_PRINTSTATS_EXTRA);

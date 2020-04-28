@@ -3170,6 +3170,11 @@ JavaCoreDumpWriter::writeSharedClassSectionAllLayersStatsHelper(J9SharedClassJav
 	_OutputStream.writeInteger(javacoreData->startupHintBytes, "%zu");
 
 	_OutputStream.writeCharacters(
+			"\n2SCLTEXTCSB            CRV Snippet bytes                         = "
+	);
+	_OutputStream.writeInteger(javacoreData->crvSnippetBytes, "%zu");
+
+	_OutputStream.writeCharacters(
 			"\n2SCLTEXTJCB            JCL data bytes                            = "
 	);
 	_OutputStream.writeInteger(javacoreData->jclDataBytes, "%zu");
@@ -3244,6 +3249,11 @@ JavaCoreDumpWriter::writeSharedClassSectionAllLayersStatsHelper(J9SharedClassJav
 			"\n2SCLTEXTNSH            Number Startup Hint Entries               = "
 	);
 	_OutputStream.writeInteger(javacoreData->numStartupHints, "%zu");
+
+	_OutputStream.writeCharacters(
+			"\n2SCLTEXTNCS            Number CRV Snippets                       = "
+	);
+	_OutputStream.writeInteger(javacoreData->numCRVSnippets, "%zu");
 
 	_OutputStream.writeCharacters(
 			"\n2SCLTEXTNJC            Number JCL Entries                        = "

@@ -174,6 +174,10 @@ public class Constants {
 	public static final String SHRC_STARTUPHINT_SUCCESS_KEY = "STARTUPHINT BYTEDATA";
 	public static final String SHRC_STARTUPHINT_FAILURE_KEY = "STARTUPHINTS 0";
 
+	public static final String SHRC_CRVSNIPPETSTATS = "crvsnippetstats";
+	public static final String SHRC_CRVSNIPPETSTATS_SUCCESS_KEY = "CRVSNIPPET BYTEDATA";
+	public static final String SHRC_CRVSNIPPETSTATS_FAILURE_KEY = "CRVSNIPPET 0";
+
 	public static final String SHRC_UBYTESTATS = "ubytestats";
 
 	// currently our dump does not contain any data for this
