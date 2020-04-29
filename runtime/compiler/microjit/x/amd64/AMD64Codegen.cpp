@@ -1,3 +1,24 @@
+/*******************************************************************************
+ * Copyright (c) 2000, 2020 IBM Corp. and others
+ *
+ * This program and the accompanying materials are made available under
+ * the terms of the Eclipse Public License 2.0 which accompanies this
+ * distribution and is available at https://www.eclipse.org/legal/epl-2.0/
+ * or the Apache License, Version 2.0 which accompanies this distribution and
+ * is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * This Source Code may also be made available under the following
+ * Secondary Licenses when the conditions for such availability set
+ * forth in the Eclipse Public License, v. 2.0 are satisfied: GNU
+ * General Public License, version 2 with the GNU Classpath
+ * Exception [1] and GNU General Public License, version 2 with the
+ * OpenJDK Assembly Exception [2].
+ *
+ * [1] https://www.gnu.org/software/classpath/license.html
+ * [2] http://openjdk.java.net/legal/assembly-exception.html
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
+ *******************************************************************************/
 #include "j9.h"
 #include "env/VMJ9.h"
 
@@ -164,6 +185,9 @@ DECLARE_TEMPLATE(movEAXImm32);
 DECLARE_TEMPLATE(movRSPOffsetR11);
 DECLARE_TEMPLATE(jumpRDI);
 DECLARE_TEMPLATE(jumpRAX);
+DECLARE_TEMPLATE(paintRegister);
+DECLARE_TEMPLATE(paintLocal);
+
 
 // bytecodes
 DECLARE_TEMPLATE(debugBreakpoint);
@@ -552,6 +576,15 @@ MJIT::ParamTable::getEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
     return success;
 }
 
+bool
+MJIT::ParamTable::setEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
+{
+    bool success = paramIndex < _paramCount;
+    if(success)
+        _tableEntries[paramIndex] = *entry;
+    return success;
+}
+
 U_16
 MJIT::ParamTable::getTotalParamSize()
 {
@@ -822,7 +855,8 @@ MJIT::CodeGenerator::CodeGenerator(
     TR::FilePointer* fp, 
     TR_J9VMBase& vm, 
     ParamTable* paramTable,
-    TR::Compilation* comp
+    TR::Compilation* comp,
+    MJIT::CodeGenGC* mjitCGGC
     ):_linkage(Linkage(config, thread, fp))
     ,_logFileFP(fp)
     ,_vm(vm)
@@ -830,8 +864,16 @@ MJIT::CodeGenerator::CodeGenerator(
     ,_stackPeakSize(0)
     ,_paramTable(paramTable)
     ,_comp(comp)
+    ,_mjitCGGC(mjitCGGC)
+    ,_atlas(NULL)
 {
     _linkage._properties.setOutgoingArgAlignment(lcm(16, _vm.getLocalObjectAlignmentInBytes()));
+}
+
+TR::GCStackAtlas*
+MJIT::CodeGenerator::getStackAtlas()
+{
+    return _atlas;
 }
 
 buffer_size_t
@@ -1000,6 +1042,147 @@ MJIT::CodeGenerator::generatePrePrologue(
     return preprologueSize;
 }
 
+MJIT::LocalTable 
+MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTableEntry* localTableEntries, U_16 entries, int32_t offsetToFirstLocal)
+{
+    U_16 entryNum = 0;
+    int32_t totalSize = 0;
+
+    //Use defaults that help catch errors when debugging
+    int32_t localIndex = -1; // Indexes are 0 based and positive
+    int32_t gcMapOffset = 0; // Offset will always be greater than 0
+    U_16 size = 0; //Sizes are all multiples of 8 and greater than 0
+    bool isRef = false; //No good default here, both options are valid.
+
+    for(TR_J9ByteCode bc = bci->first(); bc != J9BCunknown; bc = bci->next()){
+        /* It's okay to overwrite entries here.
+         * We are not storing whether the entry is a used for 
+         * load or a store because it could be both. Identifying entries 
+         * that we have already created would require zeroing the 
+         * array before use and/or remembering which entries we've created.
+         * Both might be as much work as just recreating entries, depending 
+         * on how many times a local is stored/loaded during a method.
+         * This may be worth doing later, but requires some research first.
+         */
+        gcMapOffset = 0;
+        switch(bc){
+            MakeEntry:
+                gcMapOffset = offsetToFirstLocal + totalSize;
+                localTableEntries[entryNum] = makeLocalTableEntry(localIndex, gcMapOffset, size, isRef);
+                totalSize += size;
+                entryNum++;
+                break;
+            case J9BCiload:
+            case J9BCistore:
+            case J9BCfstore:
+            case J9BCfload:
+                localIndex = (int32_t)bci->nextByte();
+                size = 8;
+                goto MakeEntry;
+		    case J9BCiload0:
+            case J9BCistore0:
+		    case J9BCfload0:
+		    case J9BCfstore0:
+                localIndex = 0;
+                size = 8;
+                goto MakeEntry;
+            case J9BCiload1:
+            case J9BCistore1:
+            case J9BCfstore1:
+            case J9BCfload1:
+                localIndex = 1;
+                size = 8;
+                goto MakeEntry;
+            case J9BCiload2:
+            case J9BCistore2:
+            case J9BCfstore2:
+            case J9BCfload2:
+                localIndex = 2;
+                size = 8;
+                goto MakeEntry;
+            case J9BCiload3:
+            case J9BCistore3:
+            case J9BCfstore3:
+            case J9BCfload3:
+                localIndex = 3;
+                size = 8;
+                goto MakeEntry;
+            case J9BClstore:
+            case J9BClload:
+            case J9BCdstore:
+            case J9BCdload:
+                localIndex = (int32_t)bci->nextByte();
+                size = 16;
+                goto MakeEntry;
+		    case J9BClstore0:
+		    case J9BClload0:
+		    case J9BCdload0:
+		    case J9BCdstore0:
+                localIndex = 0;
+                size = 16;
+                goto MakeEntry;
+            case J9BClstore1:
+            case J9BCdstore1:
+            case J9BCdload1:
+            case J9BClload1:
+                localIndex = 1;
+                size = 16;
+                goto MakeEntry;
+            case J9BClstore2:
+            case J9BClload2:
+            case J9BCdstore2:
+            case J9BCdload2:
+                localIndex = 2;
+                size = 16;
+                goto MakeEntry;
+            case J9BClstore3:
+            case J9BClload3:
+            case J9BCdstore3:
+            case J9BCdload3:
+                localIndex = 3;
+                size = 16;
+                goto MakeEntry;
+		    case J9BCaload:
+                localIndex = (int32_t)bci->nextByte();
+                size = 8;
+                isRef = true;
+                goto MakeEntry;
+		    case J9BCastore:
+            case J9BCaload0:
+            case J9BCastore0:
+                localIndex = 0;
+                size = 8;
+                isRef = true;
+                goto MakeEntry;
+            case J9BCaload1:
+            case J9BCastore1:
+                localIndex = 1;
+                size = 8;
+                isRef = true;
+                goto MakeEntry;
+            case J9BCaload2:
+            case J9BCastore2:
+                localIndex = 2;
+                size = 8;
+                isRef = true;
+                goto MakeEntry;
+            case J9BCaload3:
+            case J9BCastore3:
+                localIndex = 3;
+                size = 8;
+                isRef = true;
+                goto MakeEntry;
+            default:
+                //This is weak. We should be finding all bytecodes
+                //  which put values in the bytecodes of the method
+                //  and explicitly skip the correct number of bytecodes
+                break;
+		}
+    }
+    MJIT::LocalTable localTable(localTableEntries, entries);
+    return localTable;
+}
+
 /**
  * Write the prologue to the buffer and return the size written to the buffer.
  */
@@ -1010,7 +1193,8 @@ MJIT::CodeGenerator::generatePrologue(
     char** jitStackOverflowJumpPatchLocation,
     char* magicWordLocation,
     char* first2BytesPatchLocation,
-    char** firstInstLocation
+    char** firstInstLocation,
+    TR_J9ByteCodeIterator* bci
 ){
     int prologueSize = 0;
     uintptr_t prologueStart = (uintptr_t)buffer;
@@ -1061,7 +1245,7 @@ MJIT::CodeGenerator::generatePrologue(
     // Here we conservatively assume there is a call in this method that will require space for its return address
     _stackPeakSize = 
         allocSize + //space for stack frame
-        properties.getPointerSize() + //space for return address
+        properties.getPointerSize() + //space for return address, conservatively expecting a call
         _stackPeakSize; //space for mjit value stack (set in CompilationInfoPerThreadBase::mjit)
 
     // Small: entire stack usage fits in STACKCHECKBUFFER, so if sp is within
@@ -1087,141 +1271,38 @@ MJIT::CodeGenerator::generatePrologue(
     buffer_size_t saveArgSize = saveArgsOnStack(buffer, _stackPeakSize);
     buffer += saveArgSize;
     prologueSize += saveArgSize;
-/*
-    TR::GCStackAtlas *atlas = cg()->getStackAtlas();
 
-    if (atlas) {
-        uint32_t  numberOfParmSlots = atlas->getNumberOfParmSlotsMapped();
-        TR_GCStackMap *map;
-        if (_properties.getNumIntegerArgumentRegisters() == 0) {
-            map = atlas->getParameterMap();
-        } else {
-            map = new (trHeapMemory(), numberOfParmSlots) TR_GCStackMap(numberOfParmSlots);
-            map->copy(atlas->getParameterMap());
+    /*
+     * MJIT stack frames must conform to TR stack frame shapes. However, so long as we are able to have our frames walked, we should be
+     * free to allocate more things on the stack before the required data which is used for walking. The following is the general shape of the
+     * initial MJIT stack frame
+     * +-----------------------------+
+     * |             ...             |
+     * | Paramaters passed by caller | <-- The space for saving params passed in registers is also here
+     * |             ...             |
+     * +-----------------------------+
+     * |        Return Address       | <-- RSP points here before we sub the _stackPeakSize
+     * +-----------------------------+ <-- Caller/Callee stack boundary.
+     * |             ...             |
+     * |     Preserved Registers     |
+     * |             ...             |
+     * +-----------------------------+
+     * |             ...             |
+     * |       Local Variables       |
+     * |             ...             | <-- R10 points here at the end of the prologue, R14 always points here.
+     * +-----------------------------+ 
+     * |             ...             |
+     * |    MJIT Computation Stack   |
+     * |             ...             |
+     * +-----------------------------+ <-- RSP points here (as far as we currently know) after we sub _stackPeakSize
+     * |             ...             |
+     * | Paramaters passed to callee | <-- This is not implemented yet, because we do not yet support calling functions.
+     * |             ...             |
+     * +-----------------------------+
+     * |        Return Address       | <-- This space has been saved, but isn't being used because we do not yet call functions.
+     * +-----------------------------+ <-- End of stack frame
+     */
 
-            // Before this point, the parameter stack considers all parms to be on the stack.
-            // Fix it to have register parameters in registers.
-            TR::ParameterSymbol *paramCursor = paramIterator.getFirst();
-
-            for (paramCursor = paramIterator.getFirst();
-                paramCursor != NULL;
-                paramCursor = paramIterator.getNext()
-            ){
-                int32_t  intRegArgIndex = paramCursor->getLinkageRegisterIndex();
-                if (intRegArgIndex >= 0                   &&
-                    paramCursor->isReferencedParameter()  &&
-                    paramCursor->isCollectedReference()) {
-                    // In FSD, the register parameters have already been backspilled.
-                    // They exist in both registers and on the stack.
-                    //
-                    if (!parmsHaveBeenBackSpilled)
-                        map->resetBit(paramCursor->getGCMapIndex());
-
-                    map->setRegisterBits(TR::RealRegister::gprMask((getProperties().getIntegerArgumentRegister(intRegArgIndex))));
-                }
-            }
-        }
-
-        if (jitOverflowCheck)
-            jitOverflowCheck->setGCMap(map);
-
-        atlas->setParameterMap(map);
-    }
-
-    //Support to paint allocated frame slots.
-    if (( comp()->getOption(TR_PaintAllocatedFrameSlotsDead) || comp()->getOption(TR_PaintAllocatedFrameSlotsFauxObject) )  && allocSize!=0) {
-        uint32_t paintValue32 = 0;
-        uint64_t paintValue64 = 0;
-
-        TR::RealRegister *paintReg = NULL;
-        TR::RealRegister *frameSlotIndexReg = machine()->getRealRegister(TR::RealRegister::edi);
-        uint32_t paintBound = 0;
-        uint32_t paintSlotsOffset = 0;
-        uint32_t paintSize = allocSize-sizeof(uintptrj_t);
-
-        //Paint the slots with deadf00d
-        if (comp()->getOption(TR_PaintAllocatedFrameSlotsDead)) {
-            if (TR::Compiler->target.is64Bit())
-                paintValue64 = (uint64_t)CONSTANT64(0xdeadf00ddeadf00d);
-            else
-                paintValue32 = 0xdeadf00d;
-        } else { //Paint stack slots with a arbitrary object aligned address.
-            if (TR::Compiler->target.is64Bit()) {
-                paintValue64 = ((uintptrj_t) ((uintptrj_t)comp()->getOptions()->getHeapBase() + (uintptrj_t) 4096));
-            } else {
-                paintValue32 = ((uintptrj_t) ((uintptrj_t)comp()->getOptions()->getHeapBase() + (uintptrj_t) 4096));
-            }
-        }
-
-        TR::LabelSymbol   *startLabel = generateLabelSymbol(cg());
-
-        //Load the 64 bit paint value into a paint reg.
-        paintReg = machine()->getRealRegister(TR::RealRegister::r8);
-        cursor = new (trHeapMemory()) TR::AMD64RegImm64Instruction(cursor, MOV8RegImm64, paintReg, paintValue64, cg());
-
-
-        //Perform the paint.
-        cursor = new (trHeapMemory()) TR::X86RegImmInstruction(cursor, MOVRegImm4(), frameSlotIndexReg, paintSize, cg());
-        cursor = new (trHeapMemory()) TR::X86LabelInstruction(cursor, LABEL, startLabel, cg());
-        if (TR::Compiler->target.is64Bit())
-            cursor = new (trHeapMemory()) TR::X86MemRegInstruction(cursor, S8MemReg, generateX86MemoryReference(espReal, frameSlotIndexReg, 0,(uint8_t) paintSlotsOffset, cg()), paintReg, cg());
-        else
-            cursor = new (trHeapMemory()) TR::X86MemImmInstruction(cursor, SMemImm4(), generateX86MemoryReference(espReal, frameSlotIndexReg, 0,(uint8_t) paintSlotsOffset, cg()), paintValue32, cg());
-        cursor = new (trHeapMemory()) TR::X86RegImmInstruction(cursor, SUBRegImms(), frameSlotIndexReg, sizeof(intptr_t),cg());
-        cursor = new (trHeapMemory()) TR::X86RegImmInstruction(cursor, CMPRegImm4(), frameSlotIndexReg, paintBound, cg());
-        cursor = new (trHeapMemory()) TR::X86LabelInstruction(cursor, JGE4, startLabel,cg());
-    }
-
-    // Save preserved regs
-    cursor = savePreservedRegisters(cursor);
-
-    // Insert some counters
-    cursor = cg()->generateDebugCounter(cursor, "cg.prologues:#preserved", preservedRegsSize >> getProperties().getParmSlotShift(), TR::DebugCounter::Expensive);
-    cursor = cg()->generateDebugCounter(cursor, "cg.prologues:inline", 1, TR::DebugCounter::Expensive);
-
-    // Initialize any local pointers that could otherwise confuse the GC.
-    TR::RealRegister *framePointer = machine()->getRealRegister(TR::RealRegister::vfp);
-    if (atlas) {
-        TR_ASSERT(_properties.getNumScratchRegisters() >= 2, "Need two scratch registers to initialize reference locals");
-        TR::RealRegister *loopReg = machine()->getRealRegister(properties.getIntegerScratchRegister(1));
-
-        int32_t numReferenceLocalSlotsToInitialize = atlas->getNumberOfSlotsToBeInitialized();
-        int32_t numInternalPointerSlotsToInitialize = 0;
-
-        if (atlas->getInternalPointerMap()) {
-            numInternalPointerSlotsToInitialize = atlas->getNumberOfDistinctPinningArrays() +
-                                                  atlas->getInternalPointerMap()->getNumInternalPointers();
-        }
-
-        if (numReferenceLocalSlotsToInitialize > 0 || numInternalPointerSlotsToInitialize > 0) {
-            cursor = new (trHeapMemory()) TR::X86RegRegInstruction(cursor, XORRegReg(), scratchReg, scratchReg, cg());
-
-            // Initialize locals that are live on entry
-            if (numReferenceLocalSlotsToInitialize > 0) {
-                cursor = initializeLocals(cursor,
-                                          atlas->getLocalBaseOffset(),
-                                          numReferenceLocalSlotsToInitialize,
-                                          properties.getPointerSize(),
-                                          framePointer, 
-                                          scratchReg, 
-                                          loopReg,
-                                          cg());
-            }
-
-            // Initialize internal pointers and their pinning arrays
-            if (numInternalPointerSlotsToInitialize > 0){
-                cursor = initializeLocals(cursor,
-                                          atlas->getOffsetOfFirstInternalPointer(),
-                                          numInternalPointerSlotsToInitialize,
-                                          properties.getPointerSize(),
-                                          framePointer, 
-                                          scratchReg, 
-                                          loopReg,
-                                          cg());
-            }
-        }
-    }
-*/
     //Set up MJIT value stack
     COPY_TEMPLATE(buffer, movRSPR10, prologueSize);
     COPY_TEMPLATE(buffer, addR10Imm4, prologueSize);
@@ -1234,7 +1315,47 @@ MJIT::CodeGenerator::generatePrologue(
     // Move parameters to where the method body will expect to find them
     buffer_size_t saveSize = saveArgsInLocalArray(buffer, _stackPeakSize);
     prologueSize += saveSize;
-    if (!saveSize) return 0;
+    if (!saveSize && romMethod->argCount) return 0;
+
+    int32_t firstLocalOffset = (preservedRegsSize+8);
+    U_16 localVariableCount = romMethod->argCount + romMethod->tempCount;
+    MJIT::LocalTableEntry localTableEntries[localVariableCount];
+    LocalTable localTable = makeLocalTable(bci, localTableEntries, localVariableCount, firstLocalOffset);
+
+    //The Parameters are now in the local array, so we update the entries in the ParamTable with their values from the LocalTable
+    for(int i=0; i<_paramTable->getParamCount(); i++){
+        ParamTableEntry entry;
+        //The indexes should be the same in both tables
+        //  because (as far as we know) the parameters
+        //  are indexed the same as locals and parameters
+        localTable.getEntry(i, &entry);
+        _paramTable->setEntry(i, &entry);
+    }
+
+    TR::GCStackAtlas* atlas = _mjitCGGC->createStackAtlas(_comp, _paramTable, &localTable);
+    if (!atlas) return 0;
+    _atlas = atlas;
+
+    //Support to paint allocated frame slots.
+    if (( _comp->getOption(TR_PaintAllocatedFrameSlotsDead) || _comp->getOption(TR_PaintAllocatedFrameSlotsFauxObject) )  && allocSize!=0) {
+        uint64_t paintValue = 0;
+
+        //Paint the slots with deadf00d
+        if (_comp->getOption(TR_PaintAllocatedFrameSlotsDead)) {
+            paintValue = (uint64_t)CONSTANT64(0xdeadf00ddeadf00d);
+        } else { //Paint stack slots with a arbitrary object aligned address.
+            paintValue = ((uintptrj_t) ((uintptrj_t)_comp->getOptions()->getHeapBase() + (uintptrj_t) 4096));
+        }
+
+        COPY_TEMPLATE(buffer, paintRegister, prologueSize);
+        patchImm8(buffer, paintValue);
+        for(int32_t i=_paramTable->getParamCount(); i<localTable.getLocalCount(); i++){
+            LocalTableEntry entry;
+            localTable.getEntry(i, &entry);
+            COPY_TEMPLATE(buffer, paintLocal, prologueSize);
+            patchImm4(buffer, entry.localArrayIndex * pointerSize);
+        }
+    }
     
     return prologueSize;
 }
@@ -1307,6 +1428,16 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BCdload3);
 		    loadCasePrologue(J9BCdload):
 		    loadCaseBody(J9BCdload);
+            loadCasePrologue(J9BCaload0):
+            loadCaseBody(J9BCaload0);
+            loadCasePrologue(J9BCaload1):
+            loadCaseBody(J9BCaload1);
+            loadCasePrologue(J9BCaload2):
+            loadCaseBody(J9BCaload2);
+            loadCasePrologue(J9BCaload3):
+            loadCaseBody(J9BCaload3);
+		    loadCasePrologue(J9BCaload):
+		    loadCaseBody(J9BCaload);
             GenericLoadCall:
                 if(calledCGSize = generateLoad(buffer, method, bc, bci)){
                     buffer += calledCGSize;
@@ -1356,6 +1487,16 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BCdstore3);
 		    storeCasePrologue(J9BCdstore):
 		    storeCaseBody(J9BCdstore);
+            storeCasePrologue(J9BCastore0):
+            storeCaseBody(J9BCastore0);
+            storeCasePrologue(J9BCastore1):
+            storeCaseBody(J9BCastore1);
+            storeCasePrologue(J9BCastore2):
+            storeCaseBody(J9BCastore2);
+            storeCasePrologue(J9BCastore3):
+            storeCaseBody(J9BCastore3);
+		    storeCasePrologue(J9BCastore):
+		    storeCaseBody(J9BCastore);
             GenericStoreCall:
                 if(calledCGSize = generateStore(buffer, method, bc, bci)){
                     buffer += calledCGSize;

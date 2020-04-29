@@ -8996,6 +8996,7 @@ TR::CompilationInfoPerThreadBase::mjit(
  
       // BEGIN MICROJIT
       TR::FilePointer* logFileFP = this->getCompilation()->getOutFile();
+      TR_J9ByteCodeIterator bcIterator(0, static_cast<TR_ResolvedJ9Method *> (compilee), static_cast<TR_J9VMBase *> (&vm), comp());
  
       if(TR::Options::canJITCompile())      
          {
@@ -9019,13 +9020,10 @@ TR::CompilationInfoPerThreadBase::mjit(
       
          MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
 
-         U_16 localCount = 0;
-         MJIT::LocalTableEntry* localTableEntries = NULL;
-         MJIT::LocalTable localTable(localTableEntries, localCount);
-
 #define MAX_BUFFER_SIZE 1024
          // zeroed buffer for generated code
-         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler);
+         MJIT::CodeGenGC mjitCGGC(logFileFP);
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC);
          char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          memset(buffer, 0, MAX_BUFFER_SIZE);
          codeCache = mjit_cg.getCodeCache();
@@ -9036,11 +9034,6 @@ TR::CompilationInfoPerThreadBase::mjit(
          buffer_size_t buffer_size = 0;
 
          TR_PersistentJittedBodyInfo* bodyInfo;
-
-         comp()->cg()->createStackAtlas();
-
-         //MJIT::CodeGenGC mjit_cg_gc;
-         //mjit_cg_gc.createStackAtlas(compiler);
                
          char *magicWordLocation, *first2BytesPatchLocation;
          buffer_size_t code_size = mjit_cg.generatePrePrologue(
@@ -9085,9 +9078,13 @@ TR::CompilationInfoPerThreadBase::mjit(
             &jitStackOverflowPatchLocation,
             magicWordLocation,
             first2BytesPatchLocation,
-            &firstInstructionLocation);
+            &firstInstructionLocation,
+            &bcIterator);
          MJIT_COMPILE_ERROR(code_size, method);
 
+         TR::GCStackAtlas* atlas = mjit_cg.getStackAtlas();
+         compiler->cg()->setStackAtlas(atlas); 
+         compiler->cg()->setMethodStackMap(atlas->getLocalMap());
          compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(firstInstructionLocation-cursor));
 
          buffer_size += code_size;
@@ -9101,8 +9098,7 @@ TR::CompilationInfoPerThreadBase::mjit(
          cursor += code_size;
 
          // GENERATE BODY
-         TR_J9ByteCodeIterator bcIterator(0, static_cast<TR_ResolvedJ9Method *> (compilee), static_cast<TR_J9VMBase *> (&vm), comp());
-         uint32_t bytesFootprint = 0;
+         bcIterator.setIndex(0);
          TR_Debug dbg(this->getCompilation());
                
          this->getCompilation()->setDebug(&dbg);
@@ -9114,7 +9110,6 @@ TR::CompilationInfoPerThreadBase::mjit(
             compilee->signature(compiler->trMemory()));
                
          bool codegen_failed = false;
-
          code_size = mjit_cg.generateBody(cursor, compilee, &bcIterator);
 
          MJIT_COMPILE_ERROR(code_size, method);
@@ -9196,7 +9191,6 @@ TR::CompilationInfoPerThreadBase::mjit(
 
 
          // This is not thread safe. Safely update the extra2 pointer
-         // Uncomment this to set generated method address
          method->extra2 = prologue_address;
          if(method->extra2)
             {         

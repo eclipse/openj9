@@ -19,15 +19,19 @@
  *
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
-#include "AMD64Codegen.hpp"
+#ifndef MJIT_AMD64_CODEGENGC_HPP
+#define MJIT_AMD64_CODEGENGC_HPP
 #include "codegen/GCStackAtlas.hpp"
+#include "microjit/SideTables.hpp"
+#include "env/IO.hpp"
 
 namespace MJIT {
     class CodeGenGC {
         private:
-            TR::FilePointer* _logFileFP;
+            TR::FilePointer *_logFileFP;
         public:
             CodeGenGC(TR::FilePointer* logFileFP);
-            TR::GCStackAtlas* createStackAtlas(TR::Compilation*, ParamTable*, LocalTable*);
+            TR::GCStackAtlas* createStackAtlas(TR::Compilation*, MJIT::ParamTable*, MJIT::LocalTable*);
     };
 }
+#endif /* MJIT_AMD64_CODEGENGC_HPP */
