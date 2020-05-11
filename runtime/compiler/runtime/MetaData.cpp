@@ -245,54 +245,9 @@ createMJITExceptionTable(
          *(uint32_t *)cursor = e->_instructionHandlerPC, cursor += 4;
          *(uint32_t *)cursor = e->_catchType, cursor += 4;
          if (comp->fej9()->isAOT_DEPRECATED_DO_NOT_USE())
-            *(uintptrj_t *)cursor = (uintptrj_t)e->_byteCodeInfo.getCallerIndex(), cursor += sizeof(uintptrj_t);
+            *(uintptr_t *)cursor = (uintptr_t)e->_byteCodeInfo.getCallerIndex(), cursor += sizeof(uintptr_t);
          else
-            *(uintptrj_t *)cursor = (uintptrj_t)e->_method->resolvedMethodAddress(), cursor += sizeof(uintptrj_t);
-         }
-      else
-         {
-         TR_ASSERT(e->_catchType <= 0xFFFF, "the cp index for the catch type requires 17 bits!");
-
-         *(uint16_t *)cursor = e->_instructionStartPC, cursor += 2;
-         *(uint16_t *)cursor = e->_instructionEndPC, cursor += 2;
-         *(uint16_t *)cursor = e->_instructionHandlerPC, cursor += 2;
-         *(uint16_t *)cursor = e->_catchType, cursor += 2;
-         }
-
-      // Ensure that InstructionBoundaries are initialized properly.
-      //
-      TR_ASSERT(e->_instructionStartPC != UINT_MAX, "Uninitialized startPC in exception table entry: %p",  e);
-      TR_ASSERT(e->_instructionEndPC != UINT_MAX, "Uninitialized endPC in exception table entry: %p",  e);
-
-      if (comp->getOption(TR_FullSpeedDebug) && !debug("dontEmitFSDInfo"))
-         {
-         *(uint32_t *)cursor = e->_byteCodeInfo.getByteCodeIndex();
-         cursor += 4;
-         }
-      }
-   }
-
-static void
-createMJITExceptionTable(
-      TR_MethodMetaData * data,
-      MJIT_ExceptionTableEntryIterator & exceptionIterator,
-      bool fourByteOffsets,
-      TR::Compilation *comp)
-   {
-   uint8_t * cursor = (uint8_t *)data + sizeof(TR_MethodMetaData);
-
-   for (TR_ExceptionTableEntry * e = exceptionIterator.getFirst(); e; e = exceptionIterator.getNext())
-      {
-      if (fourByteOffsets)
-         {
-         *(uint32_t *)cursor = e->_instructionStartPC, cursor += 4;
-         *(uint32_t *)cursor = e->_instructionEndPC, cursor += 4;
-         *(uint32_t *)cursor = e->_instructionHandlerPC, cursor += 4;
-         *(uint32_t *)cursor = e->_catchType, cursor += 4;
-         if (comp->fej9()->isAOT_DEPRECATED_DO_NOT_USE())
-            *(uintptrj_t *)cursor = (uintptrj_t)e->_byteCodeInfo.getCallerIndex(), cursor += sizeof(uintptrj_t);
-         else
-            *(uintptrj_t *)cursor = (uintptrj_t)e->_method->resolvedMethodAddress(), cursor += sizeof(uintptrj_t);
+            *(uintptr_t *)cursor = (uintptr_t)e->_method->resolvedMethodAddress(), cursor += sizeof(uintptr_t);
          }
       else
          {
@@ -1962,7 +1917,7 @@ createMJITMethodMetaData(
    TR_GCStackAllocMap * stackAllocMap = trStackAtlas->getStackAllocMap();
    if (stackAllocMap)
       {
-      tableSize += numberOfMapBytes + sizeof(uintptrj_t);
+      tableSize += numberOfMapBytes + sizeof(uintptr_t);
       }
 
    // Internal pointer map

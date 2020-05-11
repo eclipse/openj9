@@ -64,7 +64,7 @@ MJIT::CodeGenGC::createStackAtlas(TR::Compilation *comp, MJIT::ParamTable *param
    // --------------------------------------------------------------------------------
    // Construct the parameter map for mapped reference parameters
    //
-   intptrj_t stackSlotSize = TR::Compiler->om.sizeofReferenceAddress();
+   intptr_t stackSlotSize = TR::Compiler->om.sizeofReferenceAddress();
    U_16 paramCount = paramTable->getParamCount();
    U_16 ParamSlots = paramTable->getTotalParamSize()/stackSlotSize;
    TR_GCStackMap *parameterMap = new (comp->trHeapMemory(), paramCount) TR_GCStackMap(paramCount);

@@ -463,6 +463,7 @@ MJIT::mapIncomingParams(
 #endif
         //3rd index of typeString is first param.
         char typeChar = typeString[i+3];
+        U_16 currentOffset = calculateOffset(&stack);
         U_16 size = MJIT::typeSignatureSize(typeChar);
         if(typeChar == MJIT::LONG_TYPE_CHARACTER && i == paramCount - 1){
             // TR requires last argument of type long uses 1 slot!
@@ -1344,7 +1345,7 @@ MJIT::CodeGenerator::generatePrologue(
         if (_comp->getOption(TR_PaintAllocatedFrameSlotsDead)) {
             paintValue = (uint64_t)CONSTANT64(0xdeadf00ddeadf00d);
         } else { //Paint stack slots with a arbitrary object aligned address.
-            paintValue = ((uintptrj_t) ((uintptrj_t)_comp->getOptions()->getHeapBase() + (uintptrj_t) 4096));
+            paintValue = ((uintptr_t) ((uintptr_t)_comp->getOptions()->getHeapBase() + (uintptr_t) 4096));
         }
 
         COPY_TEMPLATE(buffer, paintRegister, prologueSize);

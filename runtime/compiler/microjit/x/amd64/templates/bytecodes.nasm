@@ -100,6 +100,31 @@ template_start iAddTemplate
     mov [r10], r11  ; write the accumulator over the second arg.
 template_end iAddTemplate
 
+template_start iSubTemplate
+    mov r12, [r10]  ; copy top value of stack in the value register
+    add r10, 8      ; reduce the stack size by 1 slot (8 bytes)
+    mov r11, [r10]  ; copy second value to the accumulator register
+    sub r11, r12    ; subtract the value from the accumulator
+    mov [r10], r11  ; write the accumulator over the second arg.    
+template_end iSubTemplate
+
+template_start iMulTemplate
+    mov r11, [r10]  ; pop first value off java stack into the accumulator
+    add r10, 8      ; which means reducing the stack size by 1 slot (8 bytes)
+    mov r12, [r10]  ; copy second value to the value register
+    imul r11, r12   ; multiply accumulator by the value to the accumulator
+    mov [r10], r11  ; write the accumulator over the second arg.
+template_end iMulTemplate
+
+template_start iDivTemplate
+    mov r12, [r10]        ; copy top value of stack in the value register (divisor)
+    add r10, 8            ; reduce the stack size by 1 slot (8 bytes)
+    mov eax, [r10]        ; copy second value (dividend) to eax
+    cdq                   ; extend sign bit from rax to rdx
+    idiv r12d             ; divide rdx:rax by lower 32bits of r12 value 
+    mov [r10], eax        ; store the quotient in accumulator
+template_end iDivTemplate
+
 template_start iReturnTemplate
     mov rax, [r10]  ; move the stack top into the Private Linkage return register
     ret             ; return from the JITed method.
