@@ -300,5 +300,4 @@ public:
 
 
 } //namespace MJIT
-
-#endif
+#endif /* MJIT_AMD64CODEGEN_HPP */

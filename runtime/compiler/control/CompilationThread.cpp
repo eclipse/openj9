@@ -98,9 +98,11 @@
 #include "env/DebugSegmentProvider.hpp"
 #include "ilgen/J9ByteCodeIterator.hpp"
 #include "ilgen/J9ByteCodeIteratorWithState.hpp"
+#if defined(J9VM_OPT_MICROJIT)
 #include "microjit/x/amd64/AMD64Codegen.hpp"
 #include "microjit/x/amd64/AMD64CodegenGC.hpp"
 #include "microjit/utils.hpp"
+#endif /* J9VM_OPT_MICROJIT */
 #if defined(J9VM_OPT_JITSERVER)
 #include "control/JITClientCompilationThread.hpp"
 #include "control/JITServerCompilationThread.hpp"
@@ -2343,9 +2345,11 @@ bool TR::CompilationInfo::shouldRetryCompilation(TR_MethodToBeCompiled *entry, T
                entry->_optimizationPlan->setDisableGCR(); // GCR isn't needed
                tryCompilingAgain = true;
                break;
+#if defined(J9VM_OPT_MICROJIT)
             case mjitCompilationFailure:
                tryCompilingAgain = true;
                break;
+#endif
             case compilationNullSubstituteCodeCache:
             case compilationCodeMemoryExhausted:
             case compilationCodeCacheError:
@@ -8744,12 +8748,14 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
 
       TR_ASSERT(compiler->getMethodHotness() != unknownHotness, "Trying to compile at unknown hotness level");
 
+#if defined(J9VM_OPT_MICROJIT)
       UDATA mjitExtra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra2;
       if( mjitExtra && !J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) 
          {
          metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
       }
       else 
+#endif
          {
          metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
          }
@@ -8945,6 +8951,7 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
    return metaData;
    }
 
+#if defined(J9VM_OPT_MICROJIT)
 // MicroJIT returns a code size of 0 when it encournters a compilation error
 // We must use this to set the correct values an return NULL, this is the same
 // no matter which phase of compilation fails, so we create a macro here to
@@ -9244,6 +9251,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
    return metaData;
    }
+#endif
          
 // This routine should only be called from wrappedCompile
 TR_MethodMetaData *
@@ -11267,12 +11275,13 @@ TR::CompilationInfoPerThreadBase::processException(
       _methodBeingCompiled->_compErrCode = compilationHeapLimitExceeded;
       }
    /* Allocation Exceptions End */
-
+#if defined(J9VM_OPT_MICROJIT)
    catch (const MJIT::MJITCompilationFailure &e)
       {
        shouldProcessExceptionCommonTasks = false;
       _methodBeingCompiled->_compErrCode = mjitCompilationFailure;
       }
+#endif
 
    /* IL Gen Exceptions Start */
    catch (const J9::AOTHasInvokeHandle &e)

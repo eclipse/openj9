@@ -612,10 +612,12 @@ static void jitHookInitializeSendTarget(J9HookInterface * * hook, UDATA eventNum
       TR_VerboseLog::writeLineLocked(TR_Vlog_PERF, "Setting count=%d for %s", count, buffer);
       }
 
+#if defined(J9VM_OPT_MICROJIT)
    if(optionsJIT->_mjitEnabled) {
       int32_t mjitCount = optionsJIT->_mjitInitialCount;
       TR::CompilationInfo::setInitialMJITCountUnsynchronized(method,mjitCount,count);
    }
+#endif
 
    TR::CompilationInfo::setInitialInvocationCountUnsynchronized(method,count);
 

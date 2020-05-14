@@ -44,7 +44,9 @@ class TR_FrontEnd;
 class TR_OpaqueMethodBlock;
 class TR_OptimizationPlan;
 class TR_ResolvedMethod;
+#if defined(J9VM_OPT_MICROJIT)
 namespace MJIT { class CodeGenerator; }
+#endif
 namespace TR { class Instruction; }
 namespace TR { class SymbolReference; }
 
@@ -324,7 +326,9 @@ class TR_PersistentJittedBodyInfo
    friend class ::OMR::Options;
    friend class J9::Options;
    friend class TR_DebugExt;
+#if defined(J9VM_OPT_MICROJIT)
    friend class MJIT::CodeGenerator;
+#endif
 
 #if defined(TR_HOST_X86) || defined(TR_HOST_POWER) || defined(TR_HOST_S390) || defined(TR_HOST_ARM) || defined(TR_HOST_ARM64)
    friend void fixPersistentMethodInfo(void *table, bool isJITClientAOTLoad);

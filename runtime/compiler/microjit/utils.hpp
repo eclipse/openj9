@@ -32,5 +32,4 @@ inline void MJIT_ASSERT(TR::FilePointer* filePtr, bool condition, const char * c
 		assert(condition);	
 	}	
 }
-
-#endif
+#endif /* MJIT_UTILS_HPP */

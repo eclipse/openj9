@@ -515,4 +515,4 @@ public:
 };
 
 } // namespace MJIT
-#endif
+#endif /* AMDLINKAGE_HPP */

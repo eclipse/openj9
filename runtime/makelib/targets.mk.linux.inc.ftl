@@ -48,7 +48,6 @@ $(UMA_DLLTARGET) : $(UMA_OBJECTS) $(UMA_TARGET_LIBRARIES)
 		$(UMA_DLL_LINK_POSTFLAGS)
 ifdef j9vm_uma_gnuDebugSymbols
 	$(OBJCOPY) --only-keep-debug $@ $(@:$(UMA_DOT_DLL)=.debuginfo)
-	$(OBJCOPY) --strip-debug $@
 	$(OBJCOPY) --add-gnu-debuglink=$(@:$(UMA_DOT_DLL)=.debuginfo) $@
 endif
 </#assign>
@@ -64,7 +63,6 @@ $(UMA_EXETARGET) : $(UMA_OBJECTS) $(UMA_TARGET_LIBRARIES)
 		-o $@ $(UMA_EXE_POSTFIX_FLAGS)
 ifdef j9vm_uma_gnuDebugSymbols
 	$(OBJCOPY) --only-keep-debug $@ $(@:$(UMA_DOT_EXE)=.debuginfo)
-	$(OBJCOPY) --strip-debug $@
 	$(OBJCOPY) --add-gnu-debuglink=$(@:$(UMA_DOT_EXE)=.debuginfo) $@
 endif
 </#assign>

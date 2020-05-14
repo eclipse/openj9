@@ -282,7 +282,7 @@ const char * const maciek_JavaBCNames[] = {
 "JBunimplemented" /* 240 */,
 "JBunimplemented" /* 241 */,
 "JBunimplemented" /* 242 */,
-"JBreturnToMicroJIT" /* 243 */,
+"JBunimplemented" /* 243 */,
 "JBretFromNative0" /* 244 */,
 "JBretFromNative1" /* 245 */,
 "JBretFromNativeF" /* 246 */,

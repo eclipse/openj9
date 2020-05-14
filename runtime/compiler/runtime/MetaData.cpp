@@ -59,7 +59,9 @@
 #include "il/Symbol.hpp"
 #include "il/TreeTop.hpp"
 #include "il/TreeTop_inlines.hpp"
+#if defined(J9VM_OPT_MICROJIT)
 #include "microjit/ExceptionTable.hpp"
+#endif
 #include "runtime/ArtifactManager.hpp"
 #include "runtime/CodeCache.hpp"
 #include "runtime/MethodMetaData.h"
@@ -227,6 +229,7 @@ createExceptionTable(
       }
    }
 
+#if defined(J9VM_OPT_MICROJIT)
 static void
 createMJITExceptionTable(
       TR_MethodMetaData * data,
@@ -271,6 +274,7 @@ createMJITExceptionTable(
          }
       }
    }
+#endif
 
 // This method is used to calculate the size (in number of bytes)
 // that this internal pointer map will require in the J9 GC map
@@ -1131,6 +1135,7 @@ static int32_t calculateExceptionsSize(
    return exceptionsSize;
    }
 
+#if defined(J9VM_OPT_MICROJIT)
 static int32_t calculateMJITExceptionsSize(
    TR::Compilation* comp,
    MJIT_ExceptionTableEntryIterator& exceptionIterator,
@@ -1169,6 +1174,7 @@ static int32_t calculateMJITExceptionsSize(
       }
    return exceptionsSize;
    }
+#endif
 
 static void
 populateBodyInfo(
@@ -1816,6 +1822,7 @@ createMethodMetaData(
    return data;
    }
 
+#if defined(J9VM_OPT_MICROJIT)
 //
 //the routine that sequences the creation of the meta-data for 
 //   a method compiled for MJIT
@@ -2012,3 +2019,4 @@ createMJITMethodMetaData(
 
    return data;
    }
+#endif /* J9VM_OPT_MICROJIT */

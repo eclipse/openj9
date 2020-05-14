@@ -1821,5 +1821,3 @@ MJIT::CodeGenerator::allocateCodeCache(int32_t length, TR_J9VMBase *vmBase, J9VM
     return codeStart;
    
    }
-
-   

@@ -53,4 +53,4 @@ private:
    uint32_t                                  _handlerIndex;
    };
 
-#endif
+#endif /* MJIT_EXCEPTIONTABLE_INCL */

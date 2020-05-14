@@ -501,9 +501,14 @@ retry:
 	{
 		VM_BytecodeAction rc = RUN_METHOD_INTERPRETED;
 		J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(_sendMethod);
+#if defined(J9VM_OPT_MICROJIT)
 		void* mjitExtra = _sendMethod->extra2;
 		bool useMJITExtra = (mjitExtra && J9_ARE_NO_BITS_SET((UDATA)mjitExtra, J9_STARTPC_NOT_TRANSLATED));
 		void* const jitStartAddress = useMJITExtra ? mjitExtra : _sendMethod->extra;
+#else
+		void* const jitStartAddress = _sendMethod->extra;
+#endif
+			
 		if (startAddressIsCompiled((UDATA)jitStartAddress)) {
 			/* If we are single stepping, or about to run a breakpointed method, fall back to the interpreter.
 			 * Check FSD enabled first, to minimize the number of extra instructions in the normal execution path
@@ -1853,8 +1858,10 @@ done:
 
 	VMINLINE bool startAddressIsCompiled(UDATA extra) { return J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED); }
 	VMINLINE bool methodIsCompiled(J9Method *method) { return startAddressIsCompiled((UDATA)method->extra); }
-	VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra);  }
-	VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2);     }
+	VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra); }
+#if defined(J9VM_OPT_MICROJIT)
+	VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2); }
+#endif
 	VMINLINE bool singleStepEnabled() { return 0 != _vm->jitConfig->singleStepCount; }
 	VMINLINE bool methodIsBreakpointed(J9Method *method) { return J9_ARE_ANY_BITS_SET((UDATA)method->constantPool, J9_STARTPC_METHOD_BREAKPOINTED); }
 	VMINLINE bool methodCanBeRunCompiled(J9Method *method) { return !singleStepEnabled() && !methodIsBreakpointed(method); }
@@ -1863,12 +1870,16 @@ done:
 	countAndCompile(REGISTER_ARGS_LIST)
 	{
 		bool runMethodCompiled = false;
+#if defined(J9VM_OPT_MICROJIT)
 		UDATA mjitExtra = 0;
+#endif
 		UDATA preCount = 0;
 		UDATA postCount = 0;
 		UDATA result = 0;
 		do {
+#if defined(J9VM_OPT_MICROJIT)
 			mjitExtra = (UDATA)_sendMethod->extra2;
+#endif
 			preCount = (UDATA)_sendMethod->extra;
 			postCount = preCount - _currentThread->jitCountDelta;
 			if (J9_ARE_NO_BITS_SET(preCount, J9_STARTPC_NOT_TRANSLATED)) {
@@ -1897,6 +1908,7 @@ done:
 				}
 				break;
 			}
+#if defined(J9VM_OPT_MICROJIT)
 			if(mjitExtra) {
 				if (J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) {
 					/* Already compiled with MJIT */
@@ -1922,6 +1934,7 @@ done:
 					break;
 				}
 			}
+#endif
 			result = VM_AtomicSupport::lockCompareExchange((UDATA*)&_sendMethod->extra, preCount, postCount);
 			/* If count updates, run method interpreted, else loop around and try again */
 		} while (result != preCount);

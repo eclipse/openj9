@@ -341,7 +341,6 @@ JIT_PRODUCT_SOURCE_FILES+=\
     compiler/optimizer/J9EstimateCodeSize.cpp \
     compiler/optimizer/J9Inliner.cpp \
     compiler/optimizer/InterpreterEmulator.cpp \
-    compiler/microjit/ExceptionTable.cpp \
     compiler/ras/DebugExt.cpp \
     compiler/ras/DebugExtSegmentProvider.cpp \
     compiler/ras/HashTable.cpp \
@@ -407,6 +406,11 @@ JIT_PRODUCT_SOURCE_FILES+=\
     compiler/runtime/JITServerIProfiler.cpp \
     compiler/runtime/JITServerStatisticsThread.cpp \
     compiler/runtime/Listener.cpp
+endif
+
+ifneq ($(J9VM_OPT_MICROJIT),)
+JIT_PRODUCT_SOURCE_FILES+=\
+    compiler/microjit/ExceptionTable.cpp 
 endif
 
 -include $(JIT_MAKE_DIR)/files/extra.mk
