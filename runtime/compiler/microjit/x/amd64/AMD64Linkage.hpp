@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2020, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -508,7 +508,7 @@ public:
 	struct properties _properties;
     TR_J9VMBase* _fej9;
 	Linkage() = delete;
-	Linkage(J9MicroJITConfig*, J9VMThread*, TR::FilePointer* logFileFP);
+	Linkage(struct J9JITConfig*, J9VMThread*, TR::FilePointer* logFileFP);
 	inline TR_J9VMBase* getFrontEnd() {
 		return _fej9;
 	}

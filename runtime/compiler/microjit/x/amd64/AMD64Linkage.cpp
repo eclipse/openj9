@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2020, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -34,7 +34,7 @@
 | EAX (32-bit) RAX (64-bit) XMM0 (float/double) | RBX R9-R15 			| R8 (receiver in RAX) 	|
 */
 
-MJIT::Linkage::Linkage(J9MicroJITConfig* jitConfig, J9VMThread* vmThread, TR::FilePointer* logFileFP)
+MJIT::Linkage::Linkage(struct J9JITConfig* jitConfig, J9VMThread* vmThread, TR::FilePointer* logFileFP)
 {
 	_fej9 = TR_J9VMBase::get(jitConfig, vmThread);
 	const MJIT::RealRegister::RegNum noReg = MJIT::RealRegister::NoReg;

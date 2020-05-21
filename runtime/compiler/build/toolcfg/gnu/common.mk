@@ -288,8 +288,12 @@ ifeq ($(HOST_ARCH),x)
     NASM_INCLUDES=\
         $(J9SRC)/oti \
         $(J9SRC)/compiler \
-        $(J9SRC)/compiler/x/runtime \
+        $(J9SRC)/compiler/x/runtime
+
+    ifneq ($(J9VM_OPT_MICROJIT),)
+    NASM_INCLUDES=\
         $(J9SRC)/compiler/microjit/assembly
+    endif
 
     ifeq ($(HOST_BITS),32)
         NASM_OBJ_FORMAT=-felf32

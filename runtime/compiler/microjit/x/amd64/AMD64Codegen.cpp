@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2020, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -851,7 +851,7 @@ MJIT::CodeGenerator::loadArgsFromStack(
 }
 
 MJIT::CodeGenerator::CodeGenerator(
-    J9MicroJITConfig* config, 
+    struct J9JITConfig* config, 
     J9VMThread* thread, 
     TR::FilePointer* fp, 
     TR_J9VMBase& vm, 

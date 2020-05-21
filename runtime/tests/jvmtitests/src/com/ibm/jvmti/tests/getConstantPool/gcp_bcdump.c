@@ -282,7 +282,11 @@ const char * const maciek_JavaBCNames[] = {
 "JBunimplemented" /* 240 */,
 "JBunimplemented" /* 241 */,
 "JBunimplemented" /* 242 */,
-"JBunimplemented" /* 243 */,
+#if defined(J9VM_OPT_MICROJIT)
+"JBunimplemented" /* 243 */, /* The new MicroJIT does support partial compilation */
+#else
+"JBreturnToMicroJIT" /* 243 */, /* This line existed before the MicroJIT Rewrite, and looks to be a hold over from the old MicroJIT */
+#endif
 "JBretFromNative0" /* 244 */,
 "JBretFromNative1" /* 245 */,
 "JBretFromNativeF" /* 246 */,

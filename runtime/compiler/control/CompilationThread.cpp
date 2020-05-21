@@ -9076,7 +9076,8 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          char * jitStackOverflowPatchLocation = NULL;
 
-         mjit_cg.setPeakStackSize(romMethod->maxStack * 8);
+         //MicroJIT only supports x86-64 at this moment
+         mjit_cg.setPeakStackSize(romMethod->maxStack * mjit_cg.getPointerSize());
          char* firstInstructionLocation = NULL;
 
          code_size = mjit_cg.generatePrologue(

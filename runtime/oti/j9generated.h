@@ -39,10 +39,6 @@ typedef struct J9SidecarExitFunction {
 	void (*func)(void);
 } J9SidecarExitFunction;
 
-#if defined(J9VM_OPT_MICROJIT)
-typedef struct J9JITConfig J9MicroJITConfig;
-#endif
-
 struct J9JavaVM;
 typedef void (*J9SidecarExitHook)(struct J9JavaVM *);
 

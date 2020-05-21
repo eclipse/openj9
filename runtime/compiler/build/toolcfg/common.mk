@@ -29,7 +29,9 @@ PRODUCT_INCLUDES=\
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/compiler \
+ifneq ($(J9VM_OPT_MICROJIT),)
     $(FIXED_SRCBASE)/compiler/microjit \
+endif
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/omr/compiler \

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2020, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -196,7 +196,7 @@ class CodeGenerator {
 
     public:
         CodeGenerator() = delete;
-        CodeGenerator(J9MicroJITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*, TR::Compilation*, MJIT::CodeGenGC*);
+        CodeGenerator(struct J9JITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*, TR::Compilation*, MJIT::CodeGenGC*);
 
         inline void 
         setPeakStackSize(int32_t newSize)
@@ -286,6 +286,12 @@ class CodeGenerator {
          * Get a pointer to the Stack Atlas
          */
         TR::GCStackAtlas* getStackAtlas();
+
+        inline uint8_t
+        getPointerSize()
+        {
+            return _linkage._properties.getPointerSize();
+        }
 };
 
 class MJITCompilationFailure: public virtual std::exception
