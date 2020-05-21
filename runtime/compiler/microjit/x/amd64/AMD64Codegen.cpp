@@ -234,88 +234,88 @@ getRequiredAlignment(uintptr_t cursor, uintptr_t boundary, uintptr_t margin, uin
 bool
 MJIT::nativeSignature(J9Method* method, char *resultBuffer)
 {
-	J9UTF8 *methodSig;
-	UDATA arg;
-	U_16 i, ch;
-	BOOLEAN parsingReturnType = FALSE, processingBracket = FALSE;
-	char nextType = '\0';
+    J9UTF8 *methodSig;
+    UDATA arg;
+    U_16 i, ch;
+    BOOLEAN parsingReturnType = FALSE, processingBracket = FALSE;
+    char nextType = '\0';
 
-	methodSig = J9ROMMETHOD_SIGNATURE(J9_ROM_METHOD_FROM_RAM_METHOD(method));
-	i = 0;
-	arg = 3; /* skip the return type slot and JNI standard slots, they will be filled in later. */
+    methodSig = J9ROMMETHOD_SIGNATURE(J9_ROM_METHOD_FROM_RAM_METHOD(method));
+    i = 0;
+    arg = 3; /* skip the return type slot and JNI standard slots, they will be filled in later. */
 
-	while(i < J9UTF8_LENGTH(methodSig)) {
-		ch = J9UTF8_DATA(methodSig)[i++];
-		switch(ch) {
-			case '(':										/* start of signature -- skip */
-				continue;
-			case ')':										/* End of signature -- done args, find return type */
-				parsingReturnType = TRUE;
-				continue;
-			case MJIT::CLASSNAME_TYPE_CHARACTER:
-				nextType = MJIT::CLASSNAME_TYPE_CHARACTER;
-				while(J9UTF8_DATA(methodSig)[i++] != ';') {}		/* a type string - loop scanning for ';' to end it - i points past ';' when done loop */
-				break;
-			case MJIT::BOOLEAN_TYPE_CHARACTER:
-				nextType = MJIT::BOOLEAN_TYPE_CHARACTER;
-				break;
-			case MJIT::BYTE_TYPE_CHARACTER:
-				nextType = MJIT::BYTE_TYPE_CHARACTER;
-				break;
-			case MJIT::CHAR_TYPE_CHARACTER:
-				nextType = MJIT::CHAR_TYPE_CHARACTER;
-				break;
-			case MJIT::SHORT_TYPE_CHARACTER:
-				nextType = MJIT::SHORT_TYPE_CHARACTER;
-				break;
-			case MJIT::INT_TYPE_CHARACTER:
-				nextType = MJIT::INT_TYPE_CHARACTER;
-				break;
-			case MJIT::LONG_TYPE_CHARACTER:
-				nextType = MJIT::LONG_TYPE_CHARACTER;
-				break;
-			case MJIT::FLOAT_TYPE_CHARACTER:
-				nextType = MJIT::FLOAT_TYPE_CHARACTER;
-				break;
-			case MJIT::DOUBLE_TYPE_CHARACTER:
-				nextType = MJIT::DOUBLE_TYPE_CHARACTER;
-				break;
-			case '[':
-				processingBracket = TRUE;
-				continue;				/* go back to top of loop for next char */
-			case MJIT::VOID_TYPE_CHARACTER:
-				if(!parsingReturnType) {
-				    return true;
-				}
-				nextType = MJIT::VOID_TYPE_CHARACTER;
-				break;
+    while(i < J9UTF8_LENGTH(methodSig)) {
+        ch = J9UTF8_DATA(methodSig)[i++];
+        switch(ch) {
+            case '(':                                        /* start of signature -- skip */
+                continue;
+            case ')':                                        /* End of signature -- done args, find return type */
+                parsingReturnType = TRUE;
+                continue;
+            case MJIT::CLASSNAME_TYPE_CHARACTER:
+                nextType = MJIT::CLASSNAME_TYPE_CHARACTER;
+                while(J9UTF8_DATA(methodSig)[i++] != ';') {}        /* a type string - loop scanning for ';' to end it - i points past ';' when done loop */
+                break;
+            case MJIT::BOOLEAN_TYPE_CHARACTER:
+                nextType = MJIT::BOOLEAN_TYPE_CHARACTER;
+                break;
+            case MJIT::BYTE_TYPE_CHARACTER:
+                nextType = MJIT::BYTE_TYPE_CHARACTER;
+                break;
+            case MJIT::CHAR_TYPE_CHARACTER:
+                nextType = MJIT::CHAR_TYPE_CHARACTER;
+                break;
+            case MJIT::SHORT_TYPE_CHARACTER:
+                nextType = MJIT::SHORT_TYPE_CHARACTER;
+                break;
+            case MJIT::INT_TYPE_CHARACTER:
+                nextType = MJIT::INT_TYPE_CHARACTER;
+                break;
+            case MJIT::LONG_TYPE_CHARACTER:
+                nextType = MJIT::LONG_TYPE_CHARACTER;
+                break;
+            case MJIT::FLOAT_TYPE_CHARACTER:
+                nextType = MJIT::FLOAT_TYPE_CHARACTER;
+                break;
+            case MJIT::DOUBLE_TYPE_CHARACTER:
+                nextType = MJIT::DOUBLE_TYPE_CHARACTER;
+                break;
+            case '[':
+                processingBracket = TRUE;
+                continue;                /* go back to top of loop for next char */
+            case MJIT::VOID_TYPE_CHARACTER:
+                if(!parsingReturnType) {
+                    return true;
+                }
+                nextType = MJIT::VOID_TYPE_CHARACTER;
+                break;
 
-			default:
-				nextType = '\0';
-				return true;
-				break;
-		}
-		if(processingBracket) {
-			if(parsingReturnType) {
-				resultBuffer[0] = MJIT::CLASSNAME_TYPE_CHARACTER;
-				break;			/* from the while loop */
-			} else {
-				resultBuffer[arg] = MJIT::CLASSNAME_TYPE_CHARACTER;
-				arg++;
-				processingBracket = FALSE;
-			}
-		} else if(parsingReturnType) {
-			resultBuffer[0] = nextType;
-			break;			/* from the while loop */
-		} else {
-			resultBuffer[arg] = nextType;
-			arg++;
-		}
-	}
+            default:
+                nextType = '\0';
+                return true;
+                break;
+        }
+        if(processingBracket) {
+            if(parsingReturnType) {
+                resultBuffer[0] = MJIT::CLASSNAME_TYPE_CHARACTER;
+                break;            /* from the while loop */
+            } else {
+                resultBuffer[arg] = MJIT::CLASSNAME_TYPE_CHARACTER;
+                arg++;
+                processingBracket = FALSE;
+            }
+        } else if(parsingReturnType) {
+            resultBuffer[0] = nextType;
+            break;            /* from the while loop */
+        } else {
+            resultBuffer[arg] = nextType;
+            arg++;
+        }
+    }
 
-	resultBuffer[1] = MJIT::CLASSNAME_TYPE_CHARACTER; 	/* the JNIEnv */
-	resultBuffer[2] = MJIT::CLASSNAME_TYPE_CHARACTER;	/* the jobject or jclass */
-	resultBuffer[arg] = '\0';
+    resultBuffer[1] = MJIT::CLASSNAME_TYPE_CHARACTER;     /* the JNIEnv */
+    resultBuffer[2] = MJIT::CLASSNAME_TYPE_CHARACTER;    /* the jobject or jclass */
+    resultBuffer[arg] = '\0';
     return false;
 }
 
@@ -364,14 +364,14 @@ patchImm1(char* buffer, U_8 imm){
 }
 
 /*
-| Architecture 	| Endian | Return address | vTable index |
-| x86-64 		| Little | Stack 		  | R8 (receiver in RAX)
+| Architecture | Endian | Return address | vTable index         |
+| x86-64       | Little | Stack          | R8 (receiver in RAX) |
 
-| Integer Return value registers    | Integer Preserved registers   | Integer Argument registers
-| EAX (32-bit) RAX (64-bit)         | RBX R9                        | RAX RSI RDX RCX 
+| Integer Return value registers | Integer Preserved registers | Integer Argument registers |
+| EAX (32-bit) RAX (64-bit)      | RBX R9                      | RAX RSI RDX RCX            |
 
-| Float Return value registers  | Float Preserved registers | Float Argument registers
-| XMM0                          | XMM8-XMM15        		| XMM0-XMM7 
+| Float Return value registers | Float Preserved registers | Float Argument registers |
+| XMM0                         | XMM8-XMM15                | XMM0-XMM7                |
 */
 
 inline buffer_size_t
@@ -1080,10 +1080,10 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
                 localIndex = (int32_t)bci->nextByte();
                 size = 8;
                 goto MakeEntry;
-		    case J9BCiload0:
+            case J9BCiload0:
             case J9BCistore0:
-		    case J9BCfload0:
-		    case J9BCfstore0:
+            case J9BCfload0:
+            case J9BCfstore0:
                 localIndex = 0;
                 size = 8;
                 goto MakeEntry;
@@ -1115,10 +1115,10 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
                 localIndex = (int32_t)bci->nextByte();
                 size = 16;
                 goto MakeEntry;
-		    case J9BClstore0:
-		    case J9BClload0:
-		    case J9BCdload0:
-		    case J9BCdstore0:
+            case J9BClstore0:
+            case J9BClload0:
+            case J9BCdload0:
+            case J9BCdstore0:
                 localIndex = 0;
                 size = 16;
                 goto MakeEntry;
@@ -1143,12 +1143,12 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
                 localIndex = 3;
                 size = 16;
                 goto MakeEntry;
-		    case J9BCaload:
+            case J9BCaload:
                 localIndex = (int32_t)bci->nextByte();
                 size = 8;
                 isRef = true;
                 goto MakeEntry;
-		    case J9BCastore:
+            case J9BCastore:
             case J9BCaload0:
             case J9BCastore0:
                 localIndex = 0;
@@ -1178,7 +1178,7 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
                 //  which put values in the bytecodes of the method
                 //  and explicitly skip the correct number of bytecodes
                 break;
-		}
+        }
     }
     MJIT::LocalTable localTable(localTableEntries, entries);
     return localTable;
@@ -1397,8 +1397,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BCiload2);
             loadCasePrologue(J9BCiload3):
             loadCaseBody(J9BCiload3);
-		    loadCasePrologue(J9BCiload):
-		    loadCaseBody(J9BCiload);
+            loadCasePrologue(J9BCiload):
+            loadCaseBody(J9BCiload);
             loadCasePrologue(J9BClload0):
             loadCaseBody(J9BClload0);
             loadCasePrologue(J9BClload1):
@@ -1407,8 +1407,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BClload2);
             loadCasePrologue(J9BClload3):
             loadCaseBody(J9BClload3);
-		    loadCasePrologue(J9BClload):
-		    loadCaseBody(J9BClload);
+            loadCasePrologue(J9BClload):
+            loadCaseBody(J9BClload);
             loadCasePrologue(J9BCfload0):
             loadCaseBody(J9BCfload0);
             loadCasePrologue(J9BCfload1):
@@ -1417,8 +1417,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BCfload2);
             loadCasePrologue(J9BCfload3):
             loadCaseBody(J9BCfload3);
-		    loadCasePrologue(J9BCfload):
-		    loadCaseBody(J9BCfload);
+            loadCasePrologue(J9BCfload):
+            loadCaseBody(J9BCfload);
             loadCasePrologue(J9BCdload0):
             loadCaseBody(J9BCdload0);
             loadCasePrologue(J9BCdload1):
@@ -1427,8 +1427,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BCdload2);
             loadCasePrologue(J9BCdload3):
             loadCaseBody(J9BCdload3);
-		    loadCasePrologue(J9BCdload):
-		    loadCaseBody(J9BCdload);
+            loadCasePrologue(J9BCdload):
+            loadCaseBody(J9BCdload);
             loadCasePrologue(J9BCaload0):
             loadCaseBody(J9BCaload0);
             loadCasePrologue(J9BCaload1):
@@ -1437,8 +1437,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             loadCaseBody(J9BCaload2);
             loadCasePrologue(J9BCaload3):
             loadCaseBody(J9BCaload3);
-		    loadCasePrologue(J9BCaload):
-		    loadCaseBody(J9BCaload);
+            loadCasePrologue(J9BCaload):
+            loadCaseBody(J9BCaload);
             GenericLoadCall:
                 if(calledCGSize = generateLoad(buffer, method, bc, bci)){
                     buffer += calledCGSize;
@@ -1456,8 +1456,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BCistore2);
             storeCasePrologue(J9BCistore3):
             storeCaseBody(J9BCistore3);
-		    storeCasePrologue(J9BCistore):
-		    storeCaseBody(J9BCistore);
+            storeCasePrologue(J9BCistore):
+            storeCaseBody(J9BCistore);
             storeCasePrologue(J9BClstore0):
             storeCaseBody(J9BClstore0);
             storeCasePrologue(J9BClstore1):
@@ -1466,8 +1466,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BClstore2);
             storeCasePrologue(J9BClstore3):
             storeCaseBody(J9BClstore3);
-		    storeCasePrologue(J9BClstore):
-		    storeCaseBody(J9BClstore);
+            storeCasePrologue(J9BClstore):
+            storeCaseBody(J9BClstore);
             storeCasePrologue(J9BCfstore0):
             storeCaseBody(J9BCfstore0);
             storeCasePrologue(J9BCfstore1):
@@ -1476,8 +1476,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BCfstore2);
             storeCasePrologue(J9BCfstore3):
             storeCaseBody(J9BCfstore3);
-		    storeCasePrologue(J9BCfstore):
-		    storeCaseBody(J9BCfstore);
+            storeCasePrologue(J9BCfstore):
+            storeCaseBody(J9BCfstore);
             storeCasePrologue(J9BCdstore0):
             storeCaseBody(J9BCdstore0);
             storeCasePrologue(J9BCdstore1):
@@ -1486,8 +1486,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BCdstore2);
             storeCasePrologue(J9BCdstore3):
             storeCaseBody(J9BCdstore3);
-		    storeCasePrologue(J9BCdstore):
-		    storeCaseBody(J9BCdstore);
+            storeCasePrologue(J9BCdstore):
+            storeCaseBody(J9BCdstore);
             storeCasePrologue(J9BCastore0):
             storeCaseBody(J9BCastore0);
             storeCasePrologue(J9BCastore1):
@@ -1496,8 +1496,8 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
             storeCaseBody(J9BCastore2);
             storeCasePrologue(J9BCastore3):
             storeCaseBody(J9BCastore3);
-		    storeCasePrologue(J9BCastore):
-		    storeCaseBody(J9BCastore);
+            storeCasePrologue(J9BCastore):
+            storeCaseBody(J9BCastore);
             GenericStoreCall:
                 if(calledCGSize = generateStore(buffer, method, bc, bci)){
                     buffer += calledCGSize;
@@ -1631,39 +1631,39 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
             patchImm4(buffer, (U_32)(index*8));
             COPY_TEMPLATE(buffer, loadTemplate, loadSize);
             break;
-		case TR_J9ByteCode::J9BClload0:
-		case TR_J9ByteCode::J9BCfload0:
-		case TR_J9ByteCode::J9BCdload0:
+        case TR_J9ByteCode::J9BClload0:
+        case TR_J9ByteCode::J9BCfload0:
+        case TR_J9ByteCode::J9BCdload0:
         case TR_J9ByteCode::J9BCiload0:
-		case TR_J9ByteCode::J9BCaload0:
+        case TR_J9ByteCode::J9BCaload0:
             index = 0;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload1:
         case TR_J9ByteCode::J9BCfload1:
         case TR_J9ByteCode::J9BCdload1:
         case TR_J9ByteCode::J9BCiload1:
-		case TR_J9ByteCode::J9BCaload1:
+        case TR_J9ByteCode::J9BCaload1:
             index = 1;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload2:
         case TR_J9ByteCode::J9BCfload2:
         case TR_J9ByteCode::J9BCdload2:
         case TR_J9ByteCode::J9BCiload2:
-		case TR_J9ByteCode::J9BCaload2:
+        case TR_J9ByteCode::J9BCaload2:
             index = 2;
             goto GenerateTemplate;
         case TR_J9ByteCode::J9BClload3:
         case TR_J9ByteCode::J9BCfload3:
         case TR_J9ByteCode::J9BCdload3:
         case TR_J9ByteCode::J9BCiload3:
-		case TR_J9ByteCode::J9BCaload3:
+        case TR_J9ByteCode::J9BCaload3:
             index = 3;
             goto GenerateTemplate;
-		case TR_J9ByteCode::J9BClload:
-		case TR_J9ByteCode::J9BCfload:
-		case TR_J9ByteCode::J9BCdload:
-		case TR_J9ByteCode::J9BCiload:
-		case TR_J9ByteCode::J9BCaload:
+        case TR_J9ByteCode::J9BClload:
+        case TR_J9ByteCode::J9BCfload:
+        case TR_J9ByteCode::J9BCdload:
+        case TR_J9ByteCode::J9BCiload:
+        case TR_J9ByteCode::J9BCaload:
             index = bci->nextByte();
             goto GenerateTemplate;
     }
@@ -1681,9 +1681,9 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
             COPY_TEMPLATE(buffer, storeTemplate, storeSize);
             patchImm4(buffer, (U_32)(index*8));
             break;
-		case TR_J9ByteCode::J9BClstore0:
-		case TR_J9ByteCode::J9BCfstore0:
-		case TR_J9ByteCode::J9BCdstore0:
+        case TR_J9ByteCode::J9BClstore0:
+        case TR_J9ByteCode::J9BCfstore0:
+        case TR_J9ByteCode::J9BCdstore0:
         case TR_J9ByteCode::J9BCistore0:
         case TR_J9ByteCode::J9BCastore0:
             index = 0;
@@ -1709,11 +1709,11 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
         case TR_J9ByteCode::J9BCastore3:
             index = 3;
             goto GenerateTemplate;
-		case TR_J9ByteCode::J9BClstore:
-		case TR_J9ByteCode::J9BCfstore:
-		case TR_J9ByteCode::J9BCdstore:
-		case TR_J9ByteCode::J9BCistore:
-		case TR_J9ByteCode::J9BCastore:
+        case TR_J9ByteCode::J9BClstore:
+        case TR_J9ByteCode::J9BCfstore:
+        case TR_J9ByteCode::J9BCdstore:
+        case TR_J9ByteCode::J9BCistore:
+        case TR_J9ByteCode::J9BCastore:
             index = bci->nextByte();
             goto GenerateTemplate;
     }
