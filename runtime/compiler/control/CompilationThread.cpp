@@ -8750,7 +8750,7 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
 
 #if defined(J9VM_OPT_MICROJIT)
       UDATA mjitExtra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra2;
-      if( mjitExtra && !J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) 
+      if (mjitExtra && !J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) 
          {
          metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
       }
@@ -8957,7 +8957,7 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
 // no matter which phase of compilation fails, so we create a macro here to
 // perform that work.
 #define MJIT_COMPILE_ERROR(code_size, method) do{\
-   if(0 == code_size) {\
+   if (0 == code_size) {\
       method->extra2 = (void *) 0;\
       compiler->failCompilation<MJIT::MJITCompilationFailure>("Cannot compile.");\
    }\
@@ -9005,14 +9005,14 @@ TR::CompilationInfoPerThreadBase::mjit(
       TR::FilePointer* logFileFP = this->getCompilation()->getOutFile();
       TR_J9ByteCodeIterator bcIterator(0, static_cast<TR_ResolvedJ9Method *> (compilee), static_cast<TR_J9VMBase *> (&vm), comp());
  
-      if(TR::Options::canJITCompile())      
+      if (TR::Options::canJITCompile())      
          {
          TR::Options *options = TR::Options::getJITCmdLineOptions();
 
          J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
          U_16 maxLength = J9UTF8_LENGTH(J9ROMMETHOD_SIGNATURE(romMethod));
          char typeString[maxLength];
-         if(MJIT::nativeSignature(method, typeString))
+         if (MJIT::nativeSignature(method, typeString))
             {
             return 0;
             }
@@ -9022,7 +9022,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          int error_code = 0;
          MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, maxLength, &error_code, paramTableEntries, paramCount, logFileFP);
-         if(error_code)
+         if (error_code)
             MJIT_COMPILE_ERROR(0, method);
       
          MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
@@ -9200,7 +9200,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          // This is not thread safe. Safely update the extra2 pointer
          method->extra2 = prologue_address;
-         if(method->extra2)
+         if (method->extra2)
             {         
             trfprintf(
                this->getCompilation()->getOutFile(), 
@@ -9229,7 +9229,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          printCompFailureInfo(compiler, exceptionName);
          processException(vmThread, scratchSegmentProvider, compiler, haveLockedClassUnloadMonitor, exceptionName);
-         if(codeCache)
+         if (codeCache)
             {
             TR::CodeCacheManager::instance()->unreserveCodeCache(codeCache);
             }

@@ -210,39 +210,69 @@ class CodeGenerator {
             return _stackPeakSize;
         }
 
+        /**
+         * Write the pre-prologue to the buffer and return the size written to the buffer.
+         * 
+         * @param buffer                    code buffer
+         * @param method                    method for introspection
+         * @param magicWordLocation,        location of variable to hold pointer to space allocated for magic word
+         * @param first2BytesPatchLocation, location of variable to hold pointer to first 2 bytes of method to be executed
+         * @param bodyInfo                  location of variable to hold pointer to the bodyInfo, allocated inside this method
+         * @return                          size of generated code; 0 if method failed
+         */
         buffer_size_t 
         generatePrePrologue(
-            char*,
-            J9Method*,
-            char**,
-            char**,
-            TR_PersistentJittedBodyInfo**
+            char* buffer,
+            J9Method* method,
+            char** magicWordLocation,
+            char** first2BytesPatchLocation,
+            TR_PersistentJittedBodyInfo** bodyInfo
         );
 
+        /**
+         * Write the prologue to the buffer and return the size written to the buffer.
+         * 
+         * @param buffer                                code buffer
+         * @param method                                method for introspection
+         * @param jitStackOverflowJumpPatchLocation,    location of variable to hold pointer to line that jumps to the stack overflow helper.
+         * @param magicWordLocation,                    pointer to magic word location, written to during prologue generation
+         * @param first2BytesPatchLocation,             pointer to first 2 bytes location, written to during prologue generation
+         * @param firstInstLocation,                    location of variable to hold pointer to first instruction, later used to set entry point
+         * @param bci                                   bytecode iterator, used to gather type information
+         * @return                                      size of generated code; 0 if method failed
+         */
         buffer_size_t 
         generatePrologue(
-            char*,
-            J9Method*,
-            char**,
-            char*,
-            char*,
-            char**,
-            TR_J9ByteCodeIterator*
+            char* buffer, 
+            J9Method* method, 
+            char** jitStackOverflowJumpPatchLocation,
+            char* magicWordLocation,
+            char* first2BytesPatchLocation,
+            char** firstInstLocation,
+            TR_J9ByteCodeIterator* bci
         );
 
+        /**
+         * Generates the cold area used for helpers, such as the jit stack overflow checker.
+         * 
+         * @param buffer                            code buffer
+         * @param method                            method for introspection
+         * @param jitStackOverflowJumpPatchLocation location to be patched with jit stack overflow helper relative address.
+         * @return                                  size of generated code; 0 if method failed
+         */
         buffer_size_t 
         generateColdArea(
-            char*,
-            J9Method*,
-            char*
+            char* buffer, 
+            J9Method* method, 
+            char* jitStackOverflowJumpPatchLocation
         );
 
         /**
          * Generates the body for a method.
          * 
          * @param buffer         code buffer
-         * @param bci            byte code iterator
          * @param method         method for introspection
+         * @param bci            byte code iterator used in hot loop to generate body of compiled method
          * @return               size of generated code; 0 if method failed
          */
         buffer_size_t 
@@ -254,6 +284,7 @@ class CodeGenerator {
 
         /**
          * Generate an int3 for signaling debug breakpoint for Linux x86
+         * 
          * @param buffer    code buffer
          */
         buffer_size_t 
@@ -263,12 +294,10 @@ class CodeGenerator {
          * Allocate space in the code cache of size length and 
          * copy the buffer to the cache.
          * 
-         * @return pointer to the new code cache segment or NULL if failed.
-         * 
-         * @param buffer    code buffer
          * @param length    length of code in the buffer
          * @param vmBase    To check if compilation should be interrupted
          * @param vmThread  Thread Id is stored in cache
+         * @return pointer to the new code cache segment or NULL if failed.
          */
         U_8 * 
         allocateCodeCache(

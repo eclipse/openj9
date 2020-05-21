@@ -29,9 +29,6 @@ PRODUCT_INCLUDES=\
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/compiler \
-ifneq ($(J9VM_OPT_MICROJIT),)
-    $(FIXED_SRCBASE)/compiler/microjit \
-endif
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH)/$(TARGET_SUBARCH) \
     $(FIXED_SRCBASE)/omr/compiler/$(TARGET_ARCH) \
     $(FIXED_SRCBASE)/omr/compiler \
@@ -45,6 +42,11 @@ endif
     $(J9SRC)/nls \
     $(J9SRC)/oti \
     $(J9SRC)/util
+
+ifneq ($(J9VM_OPT_MICROJIT),)
+    PRODUCT_INCLUDES+=\
+        $(FIXED_SRCBASE)/compiler/microjit
+endif
 
 PRODUCT_DEFINES+=\
     BITVECTOR_BIT_NUMBERING_MSB \

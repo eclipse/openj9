@@ -1909,7 +1909,7 @@ done:
 				break;
 			}
 #if defined(J9VM_OPT_MICROJIT)
-			if(mjitExtra) {
+			if (mjitExtra) {
 				if (J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) {
 					/* Already compiled with MJIT */
 					runMethodCompiled = true;
