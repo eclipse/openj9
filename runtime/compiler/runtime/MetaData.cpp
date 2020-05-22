@@ -274,7 +274,7 @@ createMJITExceptionTable(
          }
       }
    }
-#endif
+#endif /* J9VM_OPT_MICROJIT */
 
 // This method is used to calculate the size (in number of bytes)
 // that this internal pointer map will require in the J9 GC map
@@ -1174,7 +1174,7 @@ static int32_t calculateMJITExceptionsSize(
       }
    return exceptionsSize;
    }
-#endif
+#endif /* J9VM_OPT_MICROJIT */
 
 static void
 populateBodyInfo(

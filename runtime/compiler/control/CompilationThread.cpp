@@ -9252,7 +9252,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
    return metaData;
    }
-#endif
+#endif /* J9VM_OPT_MICROJIT */
          
 // This routine should only be called from wrappedCompile
 TR_MethodMetaData *
