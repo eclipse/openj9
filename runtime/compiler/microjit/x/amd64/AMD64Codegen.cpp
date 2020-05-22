@@ -1046,7 +1046,6 @@ MJIT::CodeGenerator::generatePrePrologue(
 MJIT::LocalTable 
 MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTableEntry* localTableEntries, U_16 entries, int32_t offsetToFirstLocal)
 {
-    U_16 entryNum = 0;
     int32_t totalSize = 0;
 
     //Use defaults that help catch errors when debugging
@@ -1069,9 +1068,8 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
         switch(bc){
             MakeEntry:
                 gcMapOffset = offsetToFirstLocal + totalSize;
-                localTableEntries[entryNum] = makeLocalTableEntry(localIndex, gcMapOffset, size, isRef);
+                localTableEntries[localIndex] = makeLocalTableEntry(localIndex, gcMapOffset, size, isRef);
                 totalSize += size;
-                entryNum++;
                 break;
             case J9BCiload:
             case J9BCistore:
