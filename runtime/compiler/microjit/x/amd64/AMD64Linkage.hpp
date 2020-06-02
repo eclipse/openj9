@@ -348,7 +348,7 @@ struct properties {
 		MaxScratchRegisters  = 5
 	};
 
-	TR::FilePointer* _logFileFP;
+	TR::FilePointer        *_logFileFP;
 
 	uint32_t                _properties;
 	uint32_t                _registerFlags[NUM_REGISTERS];
@@ -506,10 +506,10 @@ struct properties {
 class Linkage {
 public:
 	struct properties _properties;
-    TR_J9VMBase* _fej9;
+    TR_J9VMBase *_fej9;
 	Linkage() = delete;
-	Linkage(struct J9JITConfig*, J9VMThread*, TR::FilePointer* logFileFP);
-	inline TR_J9VMBase* getFrontEnd() {
+	Linkage(struct J9JITConfig*, J9VMThread*, TR::FilePointer *logFileFP);
+	inline TR_J9VMBase *getFrontEnd() {
 		return _fej9;
 	}
 };

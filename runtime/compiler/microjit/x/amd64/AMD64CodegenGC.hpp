@@ -30,8 +30,8 @@ namespace MJIT {
         private:
             TR::FilePointer *_logFileFP;
         public:
-            CodeGenGC(TR::FilePointer* logFileFP);
-            TR::GCStackAtlas* createStackAtlas(TR::Compilation*, MJIT::ParamTable*, MJIT::LocalTable*);
+            CodeGenGC(TR::FilePointer *logFileFP);
+            TR::GCStackAtlas *createStackAtlas(TR::Compilation*, MJIT::ParamTable*, MJIT::LocalTable*);
     };
 }
 #endif /* MJIT_AMD64_CODEGENGC_HPP */

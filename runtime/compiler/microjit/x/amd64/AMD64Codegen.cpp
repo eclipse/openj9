@@ -207,7 +207,7 @@ DECLARE_TEMPLATE(iReturnTemplate);
 DECLARE_TEMPLATE(vReturnTemplate);
 
 static void 
-debug_print_hex(char* buffer, unsigned long long size)
+debug_print_hex(char *buffer, unsigned long long size)
 {
     printf("Start of dump:\n");
     while(size--){
@@ -216,14 +216,14 @@ debug_print_hex(char* buffer, unsigned long long size)
     printf("\nEnd of dump:");
 }
 
-inline uint32_t align(uint32_t number, uint32_t requirement, TR::FilePointer* fp)
+inline uint32_t align(uint32_t number, uint32_t requirement, TR::FilePointer *fp)
 {
     MJIT_ASSERT(fp, requirement && ((requirement & (requirement -1)) == 0), "INCORRECT ALIGNMENT");
     return (number + requirement - 1) & ~(requirement - 1);
 }
 
 static bool 
-getRequiredAlignment(uintptr_t cursor, uintptr_t boundary, uintptr_t margin, uintptr_t* alignment)
+getRequiredAlignment(uintptr_t cursor, uintptr_t boundary, uintptr_t margin, uintptr_t *alignment)
 {
     if((boundary & (boundary-1)) != 0)
         return true;
@@ -232,7 +232,7 @@ getRequiredAlignment(uintptr_t cursor, uintptr_t boundary, uintptr_t margin, uin
 }
 
 bool
-MJIT::nativeSignature(J9Method* method, char *resultBuffer)
+MJIT::nativeSignature(J9Method *method, char *resultBuffer)
 {
     J9UTF8 *methodSig;
     UDATA arg;
@@ -326,7 +326,7 @@ MJIT::nativeSignature(J9Method* method, char *resultBuffer)
  * Assumes 64-bit value
  */
 static void
-patchImm8(char* buffer, U_64 imm){
+patchImm8(char *buffer, U_64 imm){
     *(((unsigned long long int*)buffer)-1) = imm;
 }
 
@@ -337,7 +337,7 @@ patchImm8(char* buffer, U_64 imm){
  * Assumes 32-bit value
  */
 static void
-patchImm4(char* buffer, U_32 imm){
+patchImm4(char *buffer, U_32 imm){
     *(((unsigned int*)buffer)-1) = imm;
 }
 
@@ -348,7 +348,7 @@ patchImm4(char* buffer, U_32 imm){
  * Assumes 16-bit value
  */
 static void
-patchImm2(char* buffer, U_16 imm){
+patchImm2(char *buffer, U_16 imm){
     *(((unsigned short int*)buffer)-1) = imm;
 }
 
@@ -359,7 +359,7 @@ patchImm2(char* buffer, U_16 imm){
  * Assumes 8-bit value
  */
 static void
-patchImm1(char* buffer, U_8 imm){
+patchImm1(char *buffer, U_8 imm){
     *(unsigned char*)(buffer-1) = imm;
 }
 
@@ -375,7 +375,7 @@ patchImm1(char* buffer, U_8 imm){
 */
 
 inline buffer_size_t
-savePreserveRegisters(char* buffer, int32_t offset)
+savePreserveRegisters(char *buffer, int32_t offset)
 {
     int32_t size = 0;
     COPY_TEMPLATE(buffer, saveRBXOffset, size);
@@ -390,7 +390,7 @@ savePreserveRegisters(char* buffer, int32_t offset)
 }
 
 inline buffer_size_t
-loadPreserveRegisters(char* buffer, int32_t offset)
+loadPreserveRegisters(char *buffer, int32_t offset)
 {
     int32_t size = 0;
     COPY_TEMPLATE(buffer, loadRBXOffset, size);
@@ -437,10 +437,10 @@ loadPreserveRegisters(char* buffer, int32_t offset)
 
 MJIT::RegisterStack 
 MJIT::mapIncomingParams(
-    char* typeString, 
+    char *typeString, 
     U_16 maxLength, 
-    int* error_code, 
-    ParamTableEntry* paramTable, 
+    int *error_code, 
+    ParamTableEntry *paramTable, 
     U_16 paramCount, 
     TR::FilePointer *logFileFP
 ){
@@ -562,14 +562,14 @@ lcm(uint32_t a, uint32_t b)
     return a * b / gcd(a, b);
 }
 
-MJIT::ParamTable::ParamTable(ParamTableEntry* tableEntries, U_16 paramCount, RegisterStack* registerStack)
+MJIT::ParamTable::ParamTable(ParamTableEntry *tableEntries, U_16 paramCount, RegisterStack *registerStack)
     : _tableEntries(tableEntries)
     , _paramCount(paramCount)
     , _registerStack(registerStack)
 {}
 
 bool
-MJIT::ParamTable::getEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
+MJIT::ParamTable::getEntry(U_16 paramIndex, MJIT::ParamTableEntry *entry)
 {
     bool success = paramIndex < _paramCount;
     if(success)
@@ -578,7 +578,7 @@ MJIT::ParamTable::getEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
 }
 
 bool
-MJIT::ParamTable::setEntry(U_16 paramIndex, MJIT::ParamTableEntry* entry)
+MJIT::ParamTable::setEntry(U_16 paramIndex, MJIT::ParamTableEntry *entry)
 {
     bool success = paramIndex < _paramCount;
     if(success)
@@ -598,13 +598,13 @@ MJIT::ParamTable::getParamCount()
     return _paramCount;
 }
 
-MJIT::LocalTable::LocalTable(LocalTableEntry* tableEntries, U_16 localCount)
+MJIT::LocalTable::LocalTable(LocalTableEntry *tableEntries, U_16 localCount)
     : _tableEntries(tableEntries)
     , _localCount(localCount)
 {}
 
 bool
-MJIT::LocalTable::getEntry(U_16 localIndex, MJIT::LocalTableEntry* entry)
+MJIT::LocalTable::getEntry(U_16 localIndex, MJIT::LocalTableEntry *entry)
 {
     bool success = localIndex < _localCount;
     if(success)
@@ -630,7 +630,7 @@ MJIT::LocalTable::getLocalCount()
 
 buffer_size_t
 MJIT::CodeGenerator::saveArgsInLocalArray(
-    char* buffer,
+    char *buffer,
     buffer_size_t stack_alloc_space
 ){
     buffer_size_t saveSize = 0;
@@ -710,7 +710,7 @@ MJIT::CodeGenerator::saveArgsInLocalArray(
 
 buffer_size_t 
 MJIT::CodeGenerator::saveArgsOnStack(
-    char* buffer, 
+    char *buffer, 
     buffer_size_t stack_alloc_space
 ){
     buffer_size_t saveArgsSize = 0;
@@ -781,7 +781,7 @@ MJIT::CodeGenerator::saveArgsOnStack(
 
 buffer_size_t 
 MJIT::CodeGenerator::loadArgsFromStack(
-    char* buffer, 
+    char *buffer, 
     buffer_size_t stack_alloc_space
 ){
     U_16 offset = _paramTable->getTotalParamSize();
@@ -851,13 +851,13 @@ MJIT::CodeGenerator::loadArgsFromStack(
 }
 
 MJIT::CodeGenerator::CodeGenerator(
-    struct J9JITConfig* config, 
-    J9VMThread* thread, 
-    TR::FilePointer* fp, 
-    TR_J9VMBase& vm, 
-    ParamTable* paramTable,
-    TR::Compilation* comp,
-    MJIT::CodeGenGC* mjitCGGC
+    struct J9JITConfig *config, 
+    J9VMThread *thread, 
+    TR::FilePointer *fp, 
+    TR_J9VMBase &vm, 
+    ParamTable *paramTable,
+    TR::Compilation *comp,
+    MJIT::CodeGenGC *mjitCGGC
     ):_linkage(Linkage(config, thread, fp))
     ,_logFileFP(fp)
     ,_vm(vm)
@@ -879,11 +879,11 @@ MJIT::CodeGenerator::getStackAtlas()
 
 buffer_size_t
 MJIT::CodeGenerator::generateSwitchToInterpPrePrologue(
-    char* buffer,
-    J9Method* method,
+    char *buffer,
+    J9Method *method,
     buffer_size_t boundary,
     buffer_size_t margin,
-    char* typeString,
+    char *typeString,
     U_16 maxLength
 ){
 
@@ -928,11 +928,11 @@ MJIT::CodeGenerator::generateSwitchToInterpPrePrologue(
 
 buffer_size_t
 MJIT::CodeGenerator::generatePrePrologue(
-    char* buffer, 
-    J9Method* method, 
-    char** magicWordLocation,
-    char** first2BytesPatchLocation,
-    TR_PersistentJittedBodyInfo** bodyInfo
+    char *buffer, 
+    J9Method *method, 
+    char **magicWordLocation,
+    char **first2BytesPatchLocation,
+    TR_PersistentJittedBodyInfo **bodyInfo
 ){
     // Return size (in bytes) of pre-proglue on success
 
@@ -966,7 +966,7 @@ MJIT::CodeGenerator::generatePrePrologue(
     //
     if(GENERATE_SWITCH_TO_INTERP_PREPROLOGUE){ // TODO: Replace with a check that perfroms the above checks.
         //generateSwitchToInterpPrePrologue will align data for use
-        char* old_buff = buffer;
+        char *old_buff = buffer;
         preprologueSize += generateSwitchToInterpPrePrologue(buffer, method, alignmentBoundary, alignmentMargin, typeString, maxLength);
         buffer += preprologueSize;
 
@@ -1044,7 +1044,7 @@ MJIT::CodeGenerator::generatePrePrologue(
 }
 
 MJIT::LocalTable 
-MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTableEntry* localTableEntries, U_16 entries, int32_t offsetToFirstLocal)
+MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator *bci, MJIT::LocalTableEntry *localTableEntries, U_16 entries, int32_t offsetToFirstLocal)
 {
     int32_t totalSize = 0;
 
@@ -1187,13 +1187,13 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator* bci, MJIT::LocalTable
  */
 buffer_size_t
 MJIT::CodeGenerator::generatePrologue(
-    char* buffer, 
-    J9Method* method, 
-    char** jitStackOverflowJumpPatchLocation,
-    char* magicWordLocation,
-    char* first2BytesPatchLocation,
-    char** firstInstLocation,
-    TR_J9ByteCodeIterator* bci
+    char *buffer, 
+    J9Method *method, 
+    char **jitStackOverflowJumpPatchLocation,
+    char *magicWordLocation,
+    char *first2BytesPatchLocation,
+    char **firstInstLocation,
+    TR_J9ByteCodeIterator *bci
 ){
     int prologueSize = 0;
     uintptr_t prologueStart = (uintptr_t)buffer;
@@ -1331,7 +1331,7 @@ MJIT::CodeGenerator::generatePrologue(
         _paramTable->setEntry(i, &entry);
     }
 
-    TR::GCStackAtlas* atlas = _mjitCGGC->createStackAtlas(_comp, _paramTable, &localTable);
+    TR::GCStackAtlas *atlas = _mjitCGGC->createStackAtlas(_comp, _paramTable, &localTable);
     if (!atlas) return 0;
     _atlas = atlas;
 
@@ -1360,7 +1360,7 @@ MJIT::CodeGenerator::generatePrologue(
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateEpologue(char* buffer){
+MJIT::CodeGenerator::generateEpologue(char *buffer){
     int epologueSize = loadPreserveRegisters(buffer, _stackPeakSize-8);
     buffer += epologueSize;
     COPY_TEMPLATE(buffer, addRSPImm4, epologueSize);
@@ -1381,7 +1381,7 @@ case TR_J9ByteCode::byteCodeCaseType
     goto GenericStoreCall
  
 buffer_size_t 
-MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci){
+MJIT::CodeGenerator::generateBody(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCodeIterator *bci){
     buffer_size_t codeGenSize = 0;
     buffer_size_t calledCGSize = 0;
     for(TR_J9ByteCode bc = bci->first(); bc != J9BCunknown; bc = bci->next())
@@ -1589,7 +1589,7 @@ MJIT::CodeGenerator::generateBody(char* buffer, TR_ResolvedMethod* method, TR_J9
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateReturn(char* buffer, TR::DataType dt)
+MJIT::CodeGenerator::generateReturn(char *buffer, TR::DataType dt)
 {
     buffer_size_t returnSize = 0;
     buffer_size_t calledCGSize = 0;
@@ -1618,9 +1618,9 @@ MJIT::CodeGenerator::generateReturn(char* buffer, TR::DataType dt)
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCode bc, TR_J9ByteCodeIterator* bci)
+MJIT::CodeGenerator::generateLoad(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCode bc, TR_J9ByteCodeIterator *bci)
 {
-    char* signature = method->signatureChars();
+    char *signature = method->signatureChars();
     int index = -1;
     buffer_size_t loadSize = 0;
     switch(bc) {
@@ -1669,9 +1669,9 @@ MJIT::CodeGenerator::generateLoad(char* buffer, TR_ResolvedMethod* method, TR_J9
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCode bc, TR_J9ByteCodeIterator* bci)
+MJIT::CodeGenerator::generateStore(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCode bc, TR_J9ByteCodeIterator *bci)
 {
-    char* signature = method->signatureChars();
+    char *signature = method->signatureChars();
     int index = -1;
     buffer_size_t storeSize = 0;
     switch(bc) {
@@ -1719,7 +1719,7 @@ MJIT::CodeGenerator::generateStore(char* buffer, TR_ResolvedMethod* method, TR_J
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateGetStatic(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci)
+MJIT::CodeGenerator::generateGetStatic(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCodeIterator *bci)
 {
     buffer_size_t getStaticSize = 0;
     int32_t cpIndex = (int32_t)bci->next2Bytes();
@@ -1743,7 +1743,7 @@ MJIT::CodeGenerator::generateGetStatic(char* buffer, TR_ResolvedMethod* method, 
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generatePutStatic(char* buffer, TR_ResolvedMethod* method, TR_J9ByteCodeIterator* bci)
+MJIT::CodeGenerator::generatePutStatic(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCodeIterator *bci)
 {
     buffer_size_t putStaticSize = 0;
     int32_t cpIndex = (int32_t)bci->next2Bytes();
@@ -1767,7 +1767,7 @@ MJIT::CodeGenerator::generatePutStatic(char* buffer, TR_ResolvedMethod* method, 
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateColdArea(char* buffer, J9Method* method, char* jitStackOverflowJumpPatchLocation){
+MJIT::CodeGenerator::generateColdArea(char *buffer, J9Method *method, char *jitStackOverflowJumpPatchLocation){
     buffer_size_t coldAreaSize = 0;
     PATCH_RELATIVE_ADDR(jitStackOverflowJumpPatchLocation, jbe4ByteRel, (intptr_t)buffer);
     COPY_TEMPLATE(buffer, movEDIImm32, coldAreaSize);
@@ -1783,7 +1783,7 @@ MJIT::CodeGenerator::generateColdArea(char* buffer, J9Method* method, char* jitS
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateDebugBreakpoint(char* buffer) {
+MJIT::CodeGenerator::generateDebugBreakpoint(char *buffer) {
     buffer_size_t codeGenSize = 0;
     COPY_TEMPLATE(buffer, debugBreakpoint, codeGenSize);
     return codeGenSize;

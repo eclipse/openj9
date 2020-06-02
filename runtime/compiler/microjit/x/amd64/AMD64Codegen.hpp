@@ -72,7 +72,7 @@ RegisterStack
 mapIncomingParams(char*, U_16, int*, ParamTableEntry*, U_16, TR::FilePointer*);
 
 bool
-nativeSignature(J9Method* method, char *resultBuffer);
+nativeSignature(J9Method *method, char *resultBuffer);
 
 int
 getParamCount(char *typeString, U_16 maxLength);
@@ -84,10 +84,10 @@ class CodeGenerator {
         TR_J9VMBase& _vm;
         TR::CodeCache *_codeCache;
         int32_t _stackPeakSize;
-        ParamTable* _paramTable;
-        TR::Compilation* _comp;
-        MJIT::CodeGenGC* _mjitCGGC;
-        TR::GCStackAtlas* _atlas;
+        ParamTable *_paramTable;
+        TR::Compilation *_comp;
+        MJIT::CodeGenGC *_mjitCGGC;
+        TR::GCStackAtlas *_atlas;
 
         buffer_size_t generateSwitchToInterpPrePrologue(
             char*,
@@ -126,10 +126,10 @@ class CodeGenerator {
          */
         buffer_size_t
         generateLoad(
-            char* buffer,
-            TR_ResolvedMethod* method,
+            char *buffer,
+            TR_ResolvedMethod *method,
             TR_J9ByteCode bc,
-            TR_J9ByteCodeIterator* bci
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -143,10 +143,10 @@ class CodeGenerator {
          */
         buffer_size_t
         generateStore(
-            char* buffer,
-            TR_ResolvedMethod* method,
+            char *buffer,
+            TR_ResolvedMethod *method,
             TR_J9ByteCode bc,
-            TR_J9ByteCodeIterator* bci
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -159,9 +159,9 @@ class CodeGenerator {
          */
         buffer_size_t
         generatePutStatic(
-            char* buffer, 
-            TR_ResolvedMethod* method, 
-            TR_J9ByteCodeIterator* bci
+            char *buffer, 
+            TR_ResolvedMethod *method, 
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -174,9 +174,9 @@ class CodeGenerator {
          */
         buffer_size_t
         generateGetStatic(
-            char* buffer, 
-            TR_ResolvedMethod* method, 
-            TR_J9ByteCodeIterator* bci
+            char *buffer, 
+            TR_ResolvedMethod *method, 
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -188,7 +188,7 @@ class CodeGenerator {
          */
         buffer_size_t
         generateReturn(
-            char* buffer, 
+            char *buffer, 
             TR::DataType dt
         );
 
@@ -222,11 +222,11 @@ class CodeGenerator {
          */
         buffer_size_t 
         generatePrePrologue(
-            char* buffer,
-            J9Method* method,
-            char** magicWordLocation,
-            char** first2BytesPatchLocation,
-            TR_PersistentJittedBodyInfo** bodyInfo
+            char *buffer,
+            J9Method *method,
+            char **magicWordLocation,
+            char **first2BytesPatchLocation,
+            TR_PersistentJittedBodyInfo **bodyInfo
         );
 
         /**
@@ -243,13 +243,13 @@ class CodeGenerator {
          */
         buffer_size_t 
         generatePrologue(
-            char* buffer, 
-            J9Method* method, 
-            char** jitStackOverflowJumpPatchLocation,
-            char* magicWordLocation,
-            char* first2BytesPatchLocation,
-            char** firstInstLocation,
-            TR_J9ByteCodeIterator* bci
+            char *buffer, 
+            J9Method *method, 
+            char **jitStackOverflowJumpPatchLocation,
+            char *magicWordLocation,
+            char *first2BytesPatchLocation,
+            char **firstInstLocation,
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -262,9 +262,9 @@ class CodeGenerator {
          */
         buffer_size_t 
         generateColdArea(
-            char* buffer, 
-            J9Method* method, 
-            char* jitStackOverflowJumpPatchLocation
+            char *buffer, 
+            J9Method *method, 
+            char *jitStackOverflowJumpPatchLocation
         );
 
         /**
@@ -277,9 +277,9 @@ class CodeGenerator {
          */
         buffer_size_t 
         generateBody(
-            char* buffer,
-            TR_ResolvedMethod* method,
-            TR_J9ByteCodeIterator* bci
+            char *buffer,
+            TR_ResolvedMethod *method,
+            TR_J9ByteCodeIterator *bci
         );
 
         /**
@@ -288,7 +288,7 @@ class CodeGenerator {
          * @param buffer    code buffer
          */
         buffer_size_t 
-        generateDebugBreakpoint(char* buffer);
+        generateDebugBreakpoint(char *buffer);
         
         /**
          * Allocate space in the code cache of size length and 
@@ -309,12 +309,12 @@ class CodeGenerator {
         /**
          * Get the code cache 
          */
-        TR::CodeCache* getCodeCache();
+        TR::CodeCache *getCodeCache();
 
         /**
          * Get a pointer to the Stack Atlas
          */
-        TR::GCStackAtlas* getStackAtlas();
+        TR::GCStackAtlas *getStackAtlas();
 
         inline uint8_t
         getPointerSize()
@@ -323,15 +323,13 @@ class CodeGenerator {
         }
 };
 
-class MJITCompilationFailure: public virtual std::exception
-   {
-public:
-   MJITCompilationFailure() { }
-   virtual const char* what() const throw()
-      {
-      return "Unable to compile method.";
-      }
-   };
+class MJITCompilationFailure: public virtual std::exception {
+    public:
+    MJITCompilationFailure() { }
+    virtual const char *what() const throw(){
+        return "Unable to compile method.";
+    }
+};
 
 
 } //namespace MJIT

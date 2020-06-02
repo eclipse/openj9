@@ -53,7 +53,7 @@
 #include "ras/Debug.hpp"
 
 
-MJIT::CodeGenGC::CodeGenGC(TR::FilePointer* logFileFP)
+MJIT::CodeGenGC::CodeGenGC(TR::FilePointer *logFileFP)
    :_logFileFP(logFileFP)
 {}
 

@@ -55,7 +55,7 @@ struct RegisterStack {
 };
 
 inline U_16
-calculateOffset(RegisterStack* stack)
+calculateOffset(RegisterStack *stack)
 {
     return  8*(stack->useRAX  +
                stack->useRSI  +
@@ -73,7 +73,7 @@ calculateOffset(RegisterStack* stack)
 }
 
 inline void
-initParamStack(RegisterStack* stack)
+initParamStack(RegisterStack *stack)
 {
     stack->useRAX         = 0;
     stack->useRSI         = 0;
@@ -91,7 +91,7 @@ initParamStack(RegisterStack* stack)
 }
 
 inline int
-addParamIntToStack(RegisterStack* stack, U_16 size)
+addParamIntToStack(RegisterStack *stack, U_16 size)
 {
     if(!stack->useRAX){
         stack->useRAX = size/8;
@@ -112,7 +112,7 @@ addParamIntToStack(RegisterStack* stack, U_16 size)
 }
 
 inline int
-addParamFloatToStack(RegisterStack* stack, U_16 size)
+addParamFloatToStack(RegisterStack *stack, U_16 size)
 {
     if(!stack->useXMM0){
         stack->useXMM0 = size/8;
@@ -145,7 +145,7 @@ addParamFloatToStack(RegisterStack* stack, U_16 size)
 }
 
 inline int
-removeParamIntFromStack(RegisterStack* stack, U_16 *size)
+removeParamIntFromStack(RegisterStack *stack, U_16 *size)
 {
     if(stack->useRAX){
         *size = stack->useRAX*8;
@@ -170,7 +170,7 @@ removeParamIntFromStack(RegisterStack* stack, U_16 *size)
 }
 
 inline int
-removeParamFloatFromStack(RegisterStack* stack, U_16 *size)
+removeParamFloatFromStack(RegisterStack *stack, U_16 *size)
 {
     if(stack->useXMM0){
         *size = stack->useXMM0*8;
@@ -252,9 +252,9 @@ makeStackEntry(int32_t stackOffset, uint16_t size, bool isRef){
 class ParamTable
 {
     private:
-        ParamTableEntry* _tableEntries;
+        ParamTableEntry *_tableEntries;
         U_16 _paramCount;
-        RegisterStack* _registerStack;
+        RegisterStack *_registerStack;
     public:
         ParamTable(ParamTableEntry*, uint16_t, RegisterStack*);
         bool getEntry(uint16_t, ParamTableEntry*);
@@ -281,7 +281,7 @@ makeLocalTableEntry(int32_t localIndex, int32_t gcMapOffset, uint16_t size, bool
 class LocalTable
 {
     private:
-        LocalTableEntry* _tableEntries;
+        LocalTableEntry *_tableEntries;
         uint16_t _localCount;
     public:
         LocalTable(LocalTableEntry*, uint16_t);
