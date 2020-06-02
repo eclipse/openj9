@@ -660,10 +660,10 @@ public:
 #if defined(J9VM_OPT_MICROJIT)
    static void setInitialMJITCountUnsynchronized(J9Method *method, int32_t mjitThreshold, int32_t trThreshold)
       {
-      int32_t value = 0;
+      intptr_t value = 0;
       if (mjitThreshold < trThreshold)
          {
-         value = ((trThreshold - mjitThreshold) << 1) | 1;
+         value = (intptr_t)(((trThreshold - mjitThreshold) << 1) | 1);
          }
       method->extra2 = reinterpret_cast<void *>(value);
       }

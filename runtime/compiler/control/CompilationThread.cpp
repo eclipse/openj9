@@ -8966,9 +8966,9 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
 // This routine should only be called from wrappedCompile
 TR_MethodMetaData *
 TR::CompilationInfoPerThreadBase::mjit(
-   J9VMThread * vmThread,
-   TR::Compilation * compiler,
-   TR_ResolvedMethod * compilee,
+   J9VMThread *vmThread,
+   TR::Compilation *compiler,
+   TR_ResolvedMethod *compilee,
    TR_J9VMBase &vm,
    TR_OptimizationPlan *optimizationPlan,
    TR::SegmentAllocator const &scratchSegmentProvider
@@ -8977,9 +8977,9 @@ TR::CompilationInfoPerThreadBase::mjit(
 
    PORT_ACCESS_FROM_JITCONFIG(jitConfig);
 
-   TR_MethodMetaData* metaData = NULL;
+   TR_MethodMetaData *metaData = NULL;
    J9Method *method = NULL;
-   TR::CodeCache* codeCache  = NULL;
+   TR::CodeCache *codeCache  = NULL;
 
    if (_methodBeingCompiled->_priority >= CP_SYNC_MIN)
       ++_compInfo._numSyncCompilations;
@@ -8989,7 +8989,7 @@ TR::CompilationInfoPerThreadBase::mjit(
    if (_methodBeingCompiled->isDLTCompile())
       compiler->setDltBcIndex(static_cast<J9::MethodInProgressDetails &>(_methodBeingCompiled->getMethodDetails()).getByteCodeIndex());
 
-   bool volatile haveLockedClassUnloadMonitor = false; // used for compilation without VM acces
+   bool volatile haveLockedClassUnloadMonitor = false; // used for compilation without VM access
    
    try 
       {
@@ -9002,7 +9002,7 @@ TR::CompilationInfoPerThreadBase::mjit(
       TRIGGER_J9HOOK_JIT_COMPILING_START(_jitConfig->hookInterface, vmThread, method); 
  
       // BEGIN MICROJIT
-      TR::FilePointer* logFileFP = this->getCompilation()->getOutFile();
+      TR::FilePointer *logFileFP = this->getCompilation()->getOutFile();
       TR_J9ByteCodeIterator bcIterator(0, static_cast<TR_ResolvedJ9Method *> (compilee), static_cast<TR_J9VMBase *> (&vm), comp());
  
       if (TR::Options::canJITCompile())      
@@ -9031,16 +9031,16 @@ TR::CompilationInfoPerThreadBase::mjit(
          // zeroed buffer for generated code
          MJIT::CodeGenGC mjitCGGC(logFileFP);
          MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC);
-         char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
+         char *buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          memset(buffer, 0, MAX_BUFFER_SIZE);
          codeCache = mjit_cg.getCodeCache();
 
          // provide enough space for CodeCacheMethodHeader
-         char* cursor = &buffer[sizeof(OMR::CodeCacheMethodHeader)];
+         char *cursor = &buffer[sizeof(OMR::CodeCacheMethodHeader)];
 
          buffer_size_t buffer_size = 0;
 
-         TR_PersistentJittedBodyInfo* bodyInfo;
+         TR_PersistentJittedBodyInfo *bodyInfo;
                
          char *magicWordLocation, *first2BytesPatchLocation;
          buffer_size_t code_size = mjit_cg.generatePrePrologue(
@@ -9078,7 +9078,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          //MicroJIT only supports x86-64 at this moment
          mjit_cg.setPeakStackSize(romMethod->maxStack * mjit_cg.getPointerSize());
-         char* firstInstructionLocation = NULL;
+         char *firstInstructionLocation = NULL;
 
          code_size = mjit_cg.generatePrologue(
             cursor,
@@ -9090,7 +9090,7 @@ TR::CompilationInfoPerThreadBase::mjit(
             &bcIterator);
          MJIT_COMPILE_ERROR(code_size, method);
 
-         TR::GCStackAtlas* atlas = mjit_cg.getStackAtlas();
+         TR::GCStackAtlas *atlas = mjit_cg.getStackAtlas();
          compiler->cg()->setStackAtlas(atlas); 
          compiler->cg()->setMethodStackMap(atlas->getLocalMap());
          compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(firstInstructionLocation-cursor));
