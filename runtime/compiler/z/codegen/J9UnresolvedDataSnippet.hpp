@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -60,6 +60,7 @@ class UnresolvedDataSnippet : public J9::UnresolvedDataSnippet
    TR::SymbolReference     *_dataSymbolReference;
    TR::MemoryReference *_memoryReference;
    bool                    _isStore;
+   
 
    /**
     *_dataReferenceInstruction is the instruction
@@ -72,6 +73,8 @@ class UnresolvedDataSnippet : public J9::UnresolvedDataSnippet
    uint8_t                    *_literalPoolSlot;         ///< For trace file generation
 
    public:
+
+   TR::Instruction* fenceNOPInst;
 
    UnresolvedDataSnippet(TR::CodeGenerator *, TR::Node *, TR::SymbolReference *s, bool isStore, bool canCauseGC);
 

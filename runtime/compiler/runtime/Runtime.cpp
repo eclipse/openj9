@@ -1669,6 +1669,7 @@ void initializeCodeRuntimeHelperTable(J9JITConfig *jitConfig, char isSMP)
    SET(TR_S390jitResolveVirtualMethod,                    (void *) jitResolveVirtualMethod,                        TR_Helper);
    SET(TR_S390jitResolveSpecialMethod,                    (void *) jitResolveSpecialMethod,                        TR_Helper);
    SET(TR_S390jitResolveStaticMethod,                     (void *) jitResolveStaticMethod,                         TR_Helper);
+   SET(TR_S390jitResolvedFieldIsVolatile,                 (void *) jitResolvedFieldIsVolatile,                     TR_Helper);
 
    SET(TR_S390interpreterVoidStaticGlue,              (void *) _interpreterVoidStaticGlue,       TR_Helper);
    SET(TR_S390interpreterSyncVoidStaticGlue,          (void *) _interpreterSyncVoidStaticGlue,   TR_Helper);
