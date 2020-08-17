@@ -600,6 +600,8 @@ void j9gc_jvmPhaseChange(J9VMThread *currentThread, UDATA phase)
 	MM_EnvironmentBase env(currentThread->omrVMThread);
 	if (J9VM_PHASE_NOT_STARTUP == phase) {
 
+		extensions->setStartpPhaseFinished();
+
 		if ((NULL != vm->sharedClassConfig) && extensions->useGCStartupHints) {
 			if (extensions->isStandardGC()) {
 				/* read old values from SC */

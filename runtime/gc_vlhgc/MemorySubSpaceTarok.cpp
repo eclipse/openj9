@@ -21,6 +21,8 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
+#include <math.h>
+
 #include "j9.h"
 #include "j9cfg.h"
 #include "modronopt.h"
@@ -952,10 +954,231 @@ void
 MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC)
 {
 	UDATA oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
-	if (!timeForHeapContract(env, allocDescription, _systemGC)) {
-		timeForHeapExpand(env, allocDescription);
+
+	IDATA heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
+
+	if (heapSizeChange < 0) {
+		_contractionSize = (UDATA)(heapSizeChange * -1);
+		_expansionSize = 0;
+	} else if (heapSizeChange > 0) {
+		_contractionSize = 0;
+		_expansionSize = (UDATA)heapSizeChange;
+	} else {
+		_contractionSize = 0;
+		_expansionSize = 0;
 	}
+	/* Certain edge cases will trigger repetitive Global Gc's (which need to be treated differently), and this is tracked by observing pgc count */
+	_previouslyObservedPGCCount = ((MM_EnvironmentVLHGC *)env)->_heapSizingData.pgcCountSinceGMPEnd;
+
 	env->popVMstate(oldVMState);
+}
+
+/**
+ * Calculate by how many bytes we should change the current heap size. 
+ * @return positive number of bytes represents how many bytes the heap should expand. 
+ * 		   If heap should contract, a negative number representing how many bytes the heap should contract is returned.
+ */
+IDATA
+MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC) 
+{
+	IDATA sizeChange = 0;
+
+	/* Heap sizing is driven by "hybrid Heap overhead". This is a blended value, which combines free memory in "tenure" along with observed GC overhead.
+	 * If the hybrid score is too high (can be acheived by low free memory %, high gc %, or a hybrid of the 2), then the heap calculates an expansion value.
+	 * If the hybrid score is too low (can be acheived with high free memory %, low gc %, or hybrid of the 2), then the heap calculates a contraction value.
+	 * 
+	 * Notes: - If gc % is very low (suggesting contraction), and memory % is also very low (suggesting expansion), the hybrid heap score will likely suggest expansion to avoid OOM error
+	 *        - If the hybrid value falls within the acceptable thresholds, the heap will not resize
+	 */
+	double hybridHeapScore = calculateCurrentHybridHeapOverhead(env);
+	
+	/* Based on the hybrid overhead of gc cpu, and free memory, decide if heap should expand or contract */
+	if (hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold) {
+		/* Try to expand the heap */
+		sizeChange = (IDATA)calculateExpansionSize(env, allocDescription, _systemGC);
+	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold) {
+		/* Try to contract the heap */
+		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
+	}
+
+	if (0 == sizeChange && hybridHeapScore >= (double)_extensions->heapContractionGCTimeThreshold) {
+		/* There are certain edge cases where the heap should shrink in order to respect Xsoftmx, that will not be picked up if hybrid heap score is ABOVE heapContractionGCTimeThreshold 
+		 * We need to inform the calculateContractionSize() that it should not try to get the hybrid heap score within acceptable bounds, but rather, should 
+		 * just make sure -Xsoftmx is being respected
+		 */
+		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, false);
+	}
+
+	return sizeChange;
+}	
+
+double
+MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, IDATA heapChange)
+{
+	double gcOverheadWeight = 0.5;
+	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
+	double freeMemComponant = mapMemoryPercentageToGcOverhead(env, heapChange);
+
+	if (0 == heapChange) {
+		/* Do not trigger this tracepoint for heapChange != 0, since this function is run dozens of time when changing heap size */
+		Trc_MM_MemorySubSpaceTarok_calculateHybridHeapOverhead(env->getLanguageVMThread(), gcPercentage, freeMemComponant);
+	}
+
+	return 	(gcPercentage * gcOverheadWeight) + (freeMemComponant * (1 - gcOverheadWeight)); 
+}
+
+double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange)
+{
+	/* With the model being used to map free memory % to gc %, if free memory is very low, the model will increasingly suggest expansion to avoid OOM errors*/
+	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
+	
+	/* At this point, eden is full, so all the free space is all part of tenure */
+	UDATA tenureSize = getActiveMemorySize() - (UDATA)envVLHGC->_heapSizingData.reservedSize;
+	UDATA freeTenure = (UDATA)envVLHGC->_heapSizingData.freeTenure;
+
+	IDATA newFreeTenureSize = (IDATA)freeTenure + heapSizeChange;
+	IDATA newTotalMemorySize = (IDATA)tenureSize + heapSizeChange;
+	double freeMemoryRatio = ((double)newFreeTenureSize/ (double)newTotalMemorySize) * 100;
+
+	if (freeMemoryRatio == 0 || newTotalMemorySize <= 0 || newFreeTenureSize <= 0) {
+		/* The heap size change will result in no free memory left - return a very high score, suggesting expansion */
+		return 100.0;
+	}
+
+	if (freeMemoryRatio == 100.0) {
+		/* Tenure is empty. Suggest contraction */
+		return 0;
+	}
+
+	UDATA xminf = _extensions->heapFreeMinimumRatioMultiplier;
+	UDATA xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
+	UDATA xmint = _extensions->heapContractionGCTimeThreshold;
+	UDATA xmaxt = _extensions->heapExpansionGCTimeThreshold;
+
+	double freeSpaceToGcPctRatio = (double)(xmaxt - xmint) / (xmaxf - xminf);
+
+	/* Memory mapping where very low free memory has same weight as medium amount of free memory */
+	double linearMemoryScore = xmaxt - ((freeMemoryRatio - xminf) *  freeSpaceToGcPctRatio);
+
+	/* Memory mapping where high memory has higher weight than medium amount of free memory */
+	double adjustedMemoryScore = linearMemoryScore * ( (freeMemoryRatio + 1) / freeMemoryRatio);
+
+	/* Memory mapping that gives adjusted weight to high/low amount of free memory */
+	double numerator = log(1 + ( pow(1.4, adjustedMemoryScore) ) );
+	double denominator = log(1.4);
+
+	double boundAwareMemoryScore = numerator / denominator;
+	return boundAwareMemoryScore;
+}
+
+
+UDATA 
+MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc) 
+{
+	
+	if((NULL == _physicalSubArena) || !_physicalSubArena->canExpand(env) || (maxExpansionInSpace(env) == 0 )) {
+		/* The PSA or memory sub space cannot be expanded ... we are done */
+		return 0;
+	} 
+	bool expandToSatisfy = false;
+	UDATA sizeInRegionsRequired = 0;
+
+	if (NULL != allocDescription) {
+		sizeInRegionsRequired = 1;
+		if (allocDescription->isArrayletSpine()) {
+			sizeInRegionsRequired += allocDescription->getNumArraylets();
+		}
+		if (sizeInRegionsRequired > _globalAllocationManagerTarok->getFreeRegionCount()) {
+			expandToSatisfy = true;
+		}
+	}
+
+	UDATA sizeInBytesRequired = sizeInRegionsRequired * _heapRegionManager->getRegionSize();
+	UDATA expansionSize = calculateExpansionSizeInternal(env, sizeInBytesRequired, expandToSatisfy);
+	
+	return expansionSize;	
+}
+
+IDATA 
+MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC, bool shouldIncreaseHybridHeapScore)
+{
+	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Entry(env->getLanguageVMThread(), systemGC ? "true" : "false");
+
+	/* If PSA or memory sub space can't be shrunk don't bother trying */
+	if ( (NULL == _physicalSubArena) || !_physicalSubArena->canContract(env) || (maxContraction(env) == 0)) {
+		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit1(env->getLanguageVMThread());
+		return 0;
+	}
+
+	/* Don't shrink if we have not met the allocation request... we will be expanding soon if possible anyway */
+	if (NULL != allocDescription) {
+		UDATA sizeInRegionsRequired = 1;
+		if (allocDescription->isArrayletSpine()) {
+			sizeInRegionsRequired += allocDescription->getNumArraylets();
+		}
+		UDATA freeRegionCount = _globalAllocationManagerTarok->getFreeRegionCount();
+		if (sizeInRegionsRequired >= freeRegionCount) {
+			Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit4(env->getLanguageVMThread(), sizeInRegionsRequired, freeRegionCount);
+			return 0;
+		}
+	}
+
+	/* Don't shrink if we expanded in last extensions->heapContractionStabilizationCount global collections */
+	/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
+	UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapContractionStabilizationCount > gcCount) {
+		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit5(env->getLanguageVMThread());
+		return 0;	
+	}	
+
+	/* Don't shrink if its a system GC and we had less than -Xminf free at 
+	 * the start of the garbage collection 
+	 */ 
+	 if (systemGC) {
+	 	UDATA minimumFree = (getActiveMemorySize() / _extensions->heapFreeMinimumRatioDivisor) 
+								* _extensions->heapFreeMinimumRatioMultiplier;
+		UDATA freeBytesAtSystemGCStart = _extensions->heap->getResizeStats()->getFreeBytesAtSystemGCStart();
+		
+		if (freeBytesAtSystemGCStart < minimumFree) {
+	 		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit6(env->getLanguageVMThread(), freeBytesAtSystemGCStart, minimumFree);
+	 		return 0;	
+		}	
+	 }
+
+	MM_Heap * heap = MM_GCExtensions::getExtensions(_extensions)->getHeap();
+	UDATA actualSoftMx = heap->getActualSoftMxSize(env);
+
+	if(0 != actualSoftMx) {
+		if(actualSoftMx < getActiveMemorySize()) {
+			/* the softmx is less than the currentsize so we're going to attempt an aggressive contract */
+			IDATA contractionSize = (IDATA)(getActiveMemorySize() - actualSoftMx) * -1;
+			_extensions->heap->getResizeStats()->setLastContractReason(SATISFY_SOFT_MX);
+			return contractionSize;
+		}
+	}
+
+	/* No need to shrink if we will not be above -Xmaxf after satisfying the allocate */
+	UDATA allocSize = allocDescription ? allocDescription->getBytesRequested() : 0;
+		
+	/* How much, if any, do we need to contract by? If we entered this function in attempts to increase hybrid heap score, we need to determine
+	 * by how much the heap should shrink to meet the desired hybrid heap score. 
+	 * If not, we only entered this function in attempts to respect -Xsoftmx, and should skip this block entirely
+	 */
+	UDATA contractSize = 0;
+	if (shouldIncreaseHybridHeapScore) {
+		contractSize = calculateTargetContractSize(env, allocSize);
+	}
+	
+	if (contractSize == 0 ) {
+		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit3(env->getLanguageVMThread());
+		return 0;
+	}		
+	
+	/* Remember reason for contraction for later */
+	_extensions->heap->getResizeStats()->setLastContractReason(FREE_SPACE_HIGH_OR_GC_LOW);
+		
+	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit7(env->getLanguageVMThread(), contractSize);
+	return (IDATA)contractSize * -1;
 }
 
 /**
@@ -1057,139 +1280,6 @@ MM_MemorySubSpaceTarok::performContract(MM_EnvironmentBase *env, MM_AllocateDesc
 	}	
 }
 
-/**
- * Determine how much we should attempt to expand subspace by and store the result in _expansionSize
- * @return true if expansion size is non zero
- */
-bool
-MM_MemorySubSpaceTarok::timeForHeapExpand(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
-{
-	bool doExpand = false;
-	
-	if((NULL == _physicalSubArena) || !_physicalSubArena->canExpand(env) || (maxExpansionInSpace(env) == 0 )) {
-		/* The PSA or memory sub space cannot be expanded ... we are done */
-	} else {
-		bool expandToSatisfy = false;
-		UDATA sizeInRegionsRequired = 0;
-
-		if (NULL != allocDescription) {
-			sizeInRegionsRequired = 1;
-			if (allocDescription->isArrayletSpine()) {
-				sizeInRegionsRequired += allocDescription->getNumArraylets();
-			}
-			if (sizeInRegionsRequired > _globalAllocationManagerTarok->getFreeRegionCount()) {
-				expandToSatisfy = true;
-			}
-		}
-	
-		UDATA sizeInBytesRequired = sizeInRegionsRequired * _heapRegionManager->getRegionSize();
-		_expansionSize = calculateExpandSize(env, sizeInBytesRequired, expandToSatisfy);
-		doExpand = (0 != _expansionSize);
-	}
-	return doExpand;
-}
-
-/**
- * Determine how much we should attempt to contract subspace by and store the result in _contractionSize
- * 
- * @return true if contraction size is non zero
- */
-bool
-MM_MemorySubSpaceTarok::timeForHeapContract(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC)
-{
-	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Entry(env->getLanguageVMThread(), systemGC ? "true" : "false");
-
-	/* If PSA or memory sub space can't be shrunk don't bother trying */
-	if ( (NULL == _physicalSubArena) || !_physicalSubArena->canContract(env) || (maxContraction(env) == 0)) {
-		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit1(env->getLanguageVMThread());
-		return false;
-	}
-
-	/* Don't shrink if we have not met the allocation request
-	 * ..we will be expanding soon if possible anyway
-	 */
-	if (NULL != allocDescription) {
-		UDATA sizeInRegionsRequired = 1;
-		if (allocDescription->isArrayletSpine()) {
-			sizeInRegionsRequired += allocDescription->getNumArraylets();
-		}
-		UDATA freeRegionCount = _globalAllocationManagerTarok->getFreeRegionCount();
-		if (sizeInRegionsRequired >= freeRegionCount) {
-			Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit4(env->getLanguageVMThread(), sizeInRegionsRequired, freeRegionCount);
-			_contractionSize = 0;
-			return false;
-		}
-	}
-
-	MM_Heap * heap = MM_GCExtensions::getExtensions(_extensions)->getHeap();
-	UDATA actualSoftMx = heap->getActualSoftMxSize(env);
-
-	if(0 != actualSoftMx) {
-		if(actualSoftMx < getActiveMemorySize()) {
-			/* the softmx is less than the currentsize so we're going to attempt an aggressive contract */
-			_contractionSize = getActiveMemorySize() - actualSoftMx;
-			_extensions->heap->getResizeStats()->setLastContractReason(HEAP_RESIZE);
-			return true;
-		}
-	}
-	
-	/* Don't shrink if -Xmaxf1.0 specified , i.e max free is 100% */
-	if ( _extensions->heapFreeMaximumRatioMultiplier == 100 ) {
-		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit2(env->getLanguageVMThread());
-		return false;
-	}
-	
-	/* No need to shrink if we will not be above -Xmaxf after satisfying the allocate */
-	UDATA allocSize = allocDescription ? allocDescription->getBytesRequested() : 0;
-	
-	/* Are we spending too little time in GC ? */
-	bool ratioContract = checkForRatioContract(env);
-	
-	/* How much, if any, do we need to contract by ? */
-	_contractionSize = calculateTargetContractSize(env, allocSize, ratioContract);
-	
-	if (_contractionSize == 0 ) {
-		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit3(env->getLanguageVMThread());
-		return false;
-	}	
-	
-
-	
-	/* Don't shrink if we expanded in last extensions->heapContractionStabilizationCount global collections */
-	/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-	UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
-	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapContractionStabilizationCount > gcCount) {
-		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit5(env->getLanguageVMThread());
-		_contractionSize = 0;
-		return false;	
-	}	
-	
-	/* Don't shrink if its a system GC and we had less than -Xminf free at 
-	 * the start of the garbage collection 
-	 */ 
-	 if (systemGC) {
-	 	UDATA minimumFree = (getActiveMemorySize() / _extensions->heapFreeMinimumRatioDivisor) 
-								* _extensions->heapFreeMinimumRatioMultiplier;
-		UDATA freeBytesAtSystemGCStart = _extensions->heap->getResizeStats()->getFreeBytesAtSystemGCStart();
-		
-		if (freeBytesAtSystemGCStart < minimumFree) {
-	 		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit6(env->getLanguageVMThread(), freeBytesAtSystemGCStart, minimumFree);
-			_contractionSize = 0;
-	 		return false;	
-		}	
-	 }	
-	
-	/* Remember reason for contraction for later */
-	if (ratioContract) {
-		_extensions->heap->getResizeStats()->setLastContractReason(GC_RATIO_TOO_LOW);
-	} else {
-		_extensions->heap->getResizeStats()->setLastContractReason(FREE_SPACE_GREATER_MAXF);
-	}	
-		
-	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit7(env->getLanguageVMThread(), _contractionSize);
-	return true;
-}
-
 
 /**
  * Determine the amount of heap to contract.
@@ -1199,129 +1289,68 @@ MM_MemorySubSpaceTarok::timeForHeapContract(MM_EnvironmentBase *env, MM_Allocate
  * 2) The heap maximum/minimum contraction sizes
  * 3) The heap alignment
  * @note We use the approximate heap size to account for defered work that may during execution free up more memory.
- * @todo Explain what the fudge factors of +5 and +1 mean
  * @return the recommended amount of heap in bytes to contract.
  */
 UDATA
-MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDATA allocSize, bool ratioContract)
+MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDATA allocSize)
 {
-	Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Entry(env->getLanguageVMThread(), allocSize, ratioContract ? "true":"false");
+	Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Entry(env->getLanguageVMThread(), allocSize);
 	UDATA contractionSize = 0;
 
 	/* If there is not enough memory to satisfy the alloc, don't contract.  If allocSize is greater than the total free memory,
 	 * the currentFree value is a large positive number (negative unsigned number calculated above).
 	 */
 	if (allocSize > getApproximateActiveFreeMemorySize()) {
-		contractionSize = 0;
-	} else {
-		UDATA currentFree = getApproximateActiveFreeMemorySize() - allocSize;
-		UDATA currentHeapSize = getActiveMemorySize();
-		UDATA maximumFreePercent =  ratioContract ? OMR_MIN(_extensions->heapFreeMinimumRatioMultiplier + 5, _extensions->heapFreeMaximumRatioMultiplier + 1) :
-													_extensions->heapFreeMaximumRatioMultiplier + 1;
-		UDATA maximumFree = (currentHeapSize / _extensions->heapFreeMaximumRatioDivisor) * maximumFreePercent;
-
-		/* Do we have more free than is desirable ? */
-		if (currentFree > maximumFree ) {
-			/* How big a heap do we need to leave maximumFreePercent free given current live data */
-			UDATA targetHeapSize = ((currentHeapSize - currentFree) / (_extensions->heapFreeMaximumRatioDivisor - maximumFreePercent))
-										 * _extensions->heapFreeMaximumRatioDivisor;
-			
-			if (currentHeapSize < targetHeapSize) {
-				/* due to rounding errors, targetHeapSize may actually be larger than currentHeapSize */
-				contractionSize = 0;
-			} else {
-				/* Calculate how much we need to contract by to get to target size.
-				 * Note: PSA code will ensure we do not drop below initial heap size
-				 */
-				contractionSize= currentHeapSize - targetHeapSize;
-							
-				Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Event1(env->getLanguageVMThread(), contractionSize);
-				
-				/* But we don't contract too quickly or by a trivial amount */	
-				UDATA maxContract = (UDATA)(currentHeapSize * _extensions->globalMaximumContraction);
-				UDATA minContract = (UDATA)(currentHeapSize * _extensions->globalMinimumContraction);
-				UDATA contractionGranule = _extensions->regionSize;
-				
-				/* If max contraction is less than a single region (minimum contraction granularity) round it up */
-				if (maxContract < contractionGranule) {
-					maxContract = contractionGranule;
-				} else {
-					maxContract = MM_Math::roundToCeiling(contractionGranule, maxContract);
-				}
-				
-				contractionSize = OMR_MIN(contractionSize, maxContract);
-				
-				/* We will contract in multiples of region size. Result may become zero */
-				contractionSize = MM_Math::roundToFloor(contractionGranule, contractionSize);
-				
-				/* Make sure contract is worthwhile, don't want to go to possible expense of a 
-				 * compact for a small contraction
-				 */
-				if (contractionSize < minContract) { 
-					contractionSize = 0;
-				}	
-				
-				Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Event2(env->getLanguageVMThread(), contractionSize, maxContract);
-			}
-		} else {
-			/* No need to contract as current free less than max */
-			contractionSize = 0;
-		}	
+		return 0;
 	}
-		
+
+	/* At this point, we know that our hybrid heap score is too high, so we aim to simply get within acceptable bounds */
+	UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
+
+	if (heapSizeWithinGoodHybridRange != 0) {
+		/* This means the heap size we are aiming for is actually possible. This is likely always true for contraction of the heap - but may not always be true for expansion */
+
+		contractionSize = getActiveMemorySize() - heapSizeWithinGoodHybridRange;
+
+		if (contractionSize > heapSizeWithinGoodHybridRange) {
+			/* A calculation went wrong due to overflow - do not contract */
+			contractionSize = 0;
+		} else if (getApproximateActiveFreeMemorySize() < (allocSize + contractionSize)) {
+			/* After we contract, we will not have enough space to satisfy allocation, so don't suggest contraction at all */
+			contractionSize = 0;
+		} 
+	}
+	
 	Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Exit1(env->getLanguageVMThread(), contractionSize);
+
 	return contractionSize;
 }	
 
 
 /**
- * Determine how much space we need to expand the heap by on this GC cycle to meet the users specified -Xminf amount
+ * Determine how much space we need to expand the heap by on this GC cycle to get to a better hybrid heap score
  * @note We use the approximate heap size to account for defered work that may during execution free up more memory.
  * @param expandToSatisfy - if TRUE ensure we epxand heap by at least "byteRequired" bytes
- * @return Number of bytes required or 0 if current free already meets the desired bytes free
+ * @return Number of bytes to expand. 0 if no expansion is required
  */
 UDATA
-MM_MemorySubSpaceTarok::calculateExpandSize(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy)
+MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy)
 {
-	UDATA currentFree, minimumFree, desiredFree;
 	UDATA expandSize = 0;
 	
 	Trc_MM_MemorySubSpaceTarok_calculateExpandSize_Entry(env->getLanguageVMThread(), bytesRequired);
-	
-	/* How much heap space currently free ? */
-	currentFree = getApproximateActiveFreeMemorySize();
-	
-	/* and how much do we need free after this GC to meet -Xminf ? */
-	minimumFree = (getActiveMemorySize() / _extensions->heapFreeMinimumRatioDivisor) * _extensions->heapFreeMinimumRatioMultiplier;
-	
-	/* The desired free is the sum of these 2 rounded to heapAlignment */
-	desiredFree= MM_Math::roundToCeiling(_extensions->heapAlignment, minimumFree + bytesRequired);
 
-	if(desiredFree <= currentFree) {
+	UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+
+	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount ) {
 		/* Only expand if we didn't expand in last _extensions->heapExpansionStabilizationCount global collections */
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-		UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+		UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
 
-		if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount )
-		{
-			/* Determine if its time for a ratio expand ? */
-			expandSize = checkForRatioExpand(env,bytesRequired);
+		expandSize = heapSizeWithinGoodHybridRange - getActiveMemorySize();
+		if (expandSize != 0 ) {
+			_extensions->heap->getResizeStats()->setLastExpandReason(FREE_SPACE_LOW_OR_GC_HIGH);
 		}
-
-		if (expandSize > 0 ) {
-			/* Remember reason for expansion for later */
-			_extensions->heap->getResizeStats()->setLastExpandReason(GC_RATIO_TOO_HIGH);
-		} 
-	} else {
-		/* Calculate how much we need to expand the heap by in order to meet the 
-		 * allocation request and the desired -Xminf amount AFTER expansion 
-		 */
-		expandSize= ((desiredFree - currentFree) / (100 - _extensions->heapFreeMinimumRatioMultiplier)) * _extensions->heapFreeMinimumRatioDivisor;
-
-		if (expandSize > 0 ) {
-			/* Remember reason for contraction for later */
-			_extensions->heap->getResizeStats()->setLastExpandReason(FREE_SPACE_LESS_MINF);
-		}	
 	}
 
 	if (expandToSatisfy){
@@ -1341,9 +1370,7 @@ MM_MemorySubSpaceTarok::calculateExpandSize(MM_EnvironmentBase *env, UDATA bytes
 		/* and adjust to user increment values (Xmoi) */
 		expandSize = adjustExpansionWithinUserIncrement(env, expandSize);
 	}
-	
-	/* Expand size now in range -Xmine =< expandSize <= -Xmaxe */
-	
+		
 	/* Adjust within -XsoftMx limit */
 	if (expandToSatisfy){
 		/* we need at least bytesRequired or we will get an OOM */
@@ -1355,10 +1382,156 @@ MM_MemorySubSpaceTarok::calculateExpandSize(MM_EnvironmentBase *env, UDATA bytes
 		expandSize = adjustExpansionWithinSoftMax(env, expandSize, 0);
 	}
 	
-	Trc_MM_MemorySubSpaceTarok_calculateExpandSize_Exit1(env->getLanguageVMThread(), desiredFree, currentFree, expandSize);
+	Trc_MM_MemorySubSpaceTarok_calculateExpandSize_Exit1(env->getLanguageVMThread(), expandSize);
 	return expandSize;
 }
 
+UDATA
+MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
+{
+	double currentHybridHeapScore = calculateCurrentHybridHeapOverhead(env);
+	UDATA reccomendedHeapSize = getActiveMemorySize();
+
+	/* If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
+	 * Conversely, if hybrid overhead is too low, we aim to increase the hybrid overhead to an acceptable level.
+	 * 
+	 * In order to decrease hybrid overhead, heap must expand. When the heap expands, gc cpu % will decrease, and free memory % will increase, resulting in a lower overhead.
+	 * In order to increase hybrid overhead, heap must contract. When heap contracts, gc cpu % will increase, and free memory % will decrease, resulting in a higher hybrid overhead.
+	 */
+	bool hybridOverheadTooHigh = currentHybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold;
+	bool foundAcceptableHeapSizeChange = false;
+	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
+	IDATA heapSizeChangeGranularity = hybridOverheadTooHigh ? (IDATA)_heapRegionManager->getRegionSize() : (-1 * (IDATA)_heapRegionManager->getRegionSize());
+	UDATA maxHeapSizeChange = 2 * reccomendedHeapSize;
+	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
+
+	IDATA suggestedChange = heapSizeChangeGranularity;
+	/* Move the heap size in the right direction (expand/contract) to see what the memory overhead, and gc cpu overhead will be, until we find an acceptable change in heap size */
+	while (!foundAcceptableHeapSizeChange) {
+
+		if (hybridOverheadTooHigh) {
+			/* We are trying to expand - but the potential expansion amount is too high*/
+			if ((reccomendedHeapSize + suggestedChange) > maxHeapSizeChange) {
+				break;
+			}
+		} else {
+			/* Don't contract so much as to exhaust free tenure */
+			if ((suggestedChange * -1) >= (IDATA)envVLHGC->_heapSizingData.freeTenure) {
+				break;
+			}
+		}
+
+		/* Test what will happen to gc cpu % and free memory % if we expand/contract by heapSizeChange bytes */
+		double potentialHybridOverhead = calculateHybridHeapOverhead(env, suggestedChange);
+
+		if (potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold && potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold) {
+			/* The heap size we tested will give us an acceptable amount of free space, and better gc cpu % */
+			reccomendedHeapSize += suggestedChange;
+			foundAcceptableHeapSizeChange = true;
+			Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_1(env->getLanguageVMThread(), reccomendedHeapSize, potentialHybridOverhead);
+		} else {
+			/* The heap size we tried was not satisfactory. Keep searching */
+			suggestedChange += heapSizeChangeGranularity;
+		}
+	}
+
+	/* If looking at the overhead curve did not work, base the expansion/contraction off of how high/low the hybrid overhead is. 
+	 * For each % above heapExpansionGCTimeThreshold, expand more aggresively. 
+	 * Ie, if heapExpansionGCTimeThreshold = 13, and measured hybrid overhead is 20, we want to expand by a larger amount than if measured hybrid overhead is 14.
+	 */
+	if (!foundAcceptableHeapSizeChange) {
+		/* Expansion and contraction may increase/decrease by larger/smaller amounts */
+		UDATA sizeChangeFactor = 0;
+
+		/* percentDiff is represented as percent between 0 - 100 */
+		double percentDiff = 0.0;
+
+		if (currentHybridHeapScore >= (double)_extensions->heapExpansionGCTimeThreshold) {
+			/* Try to bring hybridHeapScore a little bit below _extensions->heapExpansionGCTimeThreshold */
+			percentDiff = currentHybridHeapScore - (double)_extensions->heapExpansionGCTimeThreshold;
+
+			/* Limit the percent difference to prevent any accidental big changes. 
+			 * This helps deal with cases with one GC that is too long for whatever reason, causing a massive, undesired increase in heap size 
+			 */
+			percentDiff = OMR_MAX(percentDiff, 5.0);
+
+			/* Be a bit more aggressive with expansion than contraction.  */	
+			sizeChangeFactor = 2;	
+
+		} else if (currentHybridHeapScore <= (double)_extensions->heapContractionGCTimeThreshold) {
+			/* Try to bring hybridHeapScore a little bit above _extensions->heapContractionGCTimeThreshold.
+			 * If this doesn't cause the hybrid heap score to increase enough so that it is within acceptable bounds, this path will be taken 
+			 * again later, and another small contraction will occur.
+			 */
+			percentDiff = currentHybridHeapScore - (double)_extensions->heapContractionGCTimeThreshold;
+			sizeChangeFactor = 1;
+		} 
+
+		/* Since percentDiff is 0 - 100, make sure to convert it to 0-1 percentage */
+		double heapSizePercentChange = (1.0 + ((double)sizeChangeFactor * (percentDiff / 100 )));
+		Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_2(env->getLanguageVMThread(), heapSizePercentChange);
+		reccomendedHeapSize = (UDATA)(heapSizePercentChange * reccomendedHeapSize);
+	}
+
+	return reccomendedHeapSize;
+}
+
+
+double 
+MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDATA heapSizeChange)
+{
+	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
+
+	/* Since we only attempt to resize after PGC's and Global GC's, if the PGC count has increased, it means we are resizing after a PGC
+	* and the GMP and PGC statistics we have collected, are useable. Otherwise, use backup methods which are independant of heapSizeChange
+	*/
+
+	if (_previouslyObservedPGCCount != envVLHGC->_heapSizingData.pgcCountSinceGMPEnd) {
+		/* Resizing after a PGC */
+
+		UDATA pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
+
+		if (pgcCount == 0 && _lastObservedGcPercentage == 0) {
+			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold */
+			_lastObservedGcPercentage = (double)_extensions->heapExpansionGCTimeThreshold;
+
+		} else {
+
+			if (0 != heapSizeChange) {
+				/* Determine what the gc cpu % would be if we changed the heap by heapSizeChange bytes
+				 * Main idea is that the change in number of pgc's (per gmp) will be proportional to how much free tenure changes;
+				 */
+				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
+				UDATA currentFreeTenure = (UDATA)envVLHGC->_heapSizingData.freeTenure;
+				UDATA potentialFreeTenure = currentFreeTenure + heapSizeChange;
+				if (heapSizeChange <= (-1 * (IDATA)currentFreeTenure) ) {
+					/* If we try to shrink too much, too fast, tenure will be way too small, causing lots of GC work */
+					potentialFreeTenure = 1;
+				}
+				pgcCount = (UDATA)(((double)potentialFreeTenure / currentFreeTenure) * pgcCount);
+			}
+
+			double gcActiveTime = (double)(pgcCount * envVLHGC->_heapSizingData.avgPgcTimeUs) + envVLHGC->_heapSizingData.gmpTime; 
+			double gcInterval = (double)(pgcCount  * (envVLHGC->_heapSizingData.avgPgcTimeUs + envVLHGC->_heapSizingData.avgPgcIntervalUs)) + envVLHGC->_heapSizingData.gmpTime;
+			double gcActiveRatio = gcActiveTime / gcInterval;
+
+			_lastObservedGcPercentage = gcActiveRatio * 100;
+		}
+
+	} else {
+		/* Resizing the heap after global GC. The PGC and GMP timing data MAY no longer be accurate - look at backup methods. 
+		 * The values below do not change if heapSizeChange != 0, since global GC is proportional to live data in heap, rather than heap size. 
+		 * This means changing the heap size will not change the gc% by much
+		 */
+		if(NULL != _collector) {		
+			_lastObservedGcPercentage = (double)_collector->getGCTimePercentage(env);	
+		} else {	
+			_lastObservedGcPercentage= (double)_extensions->getGlobalCollector()->getGCTimePercentage(env);	
+		}
+	}	
+
+	return _lastObservedGcPercentage;
+}
 
 UDATA
 MM_MemorySubSpaceTarok::calculateCollectorExpandSize(MM_EnvironmentBase *env)
@@ -1386,7 +1559,6 @@ MM_MemorySubSpaceTarok::checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytes
 {
 	Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Entry(env->getLanguageVMThread(), bytesRequired);
 	
-	U_32 gcPercentage;
 	UDATA currentFree, maxFree;
 
 	/* How many bytes currently free ? */	 
@@ -1402,13 +1574,9 @@ MM_MemorySubSpaceTarok::checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytes
 		return 0;
 	}														 
 						 
-	/* Ask the collector for percentage of time being spent in GC */
-	if(NULL != _collector) {
-		gcPercentage = _collector->getGCTimePercentage(env);
-	} else {
-		gcPercentage= _extensions->getGlobalCollector()->getGCTimePercentage(env);
-	}
-	
+	/* Ask for percentage of time being spent in GC */
+	U_32 gcPercentage = (U_32)calculateGcPctForHeapChange(env, 0);
+
 	/* Is too much time is being spent in GC? */
 	if (gcPercentage < _extensions->heapExpansionGCTimeThreshold) {
 		Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Exit2(env->getLanguageVMThread(), gcPercentage);
@@ -1452,36 +1620,6 @@ MM_MemorySubSpaceTarok::checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytes
 	}
 }	
 	
-/**
- * Determine if a ratio contract is required.
- * Calculate the percentage of GC time relative to total execution time, and if this percentage
- * is less than a particular threshold, it is time to contract.
- * @return true if a contraction is desirable, false otherwise.
- */
-bool
-MM_MemorySubSpaceTarok::checkForRatioContract(MM_EnvironmentBase *env) 
-{
-	Trc_MM_MemorySubSpaceTarok_checkForRatioContract_Entry(env->getLanguageVMThread());
-	
-	/* Ask the collector for percentage of time spent in GC */
-	U_32 gcPercentage;
-	if(NULL != _collector) {
-		gcPercentage = _collector->getGCTimePercentage(env);
-	} else {
-		gcPercentage = _extensions->getGlobalCollector()->getGCTimePercentage(env);
-	}
-	
-	/* If we are spending less than extensions->heapContractionGCTimeThreshold of
-	 * our time in gc then we should attempt to shrink the heap
-	 */ 	
-	if (gcPercentage > 0 && gcPercentage < _extensions->heapContractionGCTimeThreshold) {
-		Trc_MM_MemorySubSpaceTarok_checkForRatioContract_Exit1(env->getLanguageVMThread(), gcPercentage);
-		return true;
-	} else {
-		Trc_MM_MemorySubSpaceTarok_checkForRatioContract_Exit2(env->getLanguageVMThread(), gcPercentage);
-		return false;
-	}			
-}
 
 
 /**

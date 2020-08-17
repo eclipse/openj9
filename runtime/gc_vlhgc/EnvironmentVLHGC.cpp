@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -41,6 +41,7 @@ MM_EnvironmentVLHGC::MM_EnvironmentVLHGC(OMR_VMThread *omrVMThread)
 	, _rsclBufferControlBlockCount(0)
 	, _rememberedSetCardBucketPool(NULL)
 	, _lastOverflowedRsclWithReleasedBuffers(NULL)
+	, _heapSizingData()
 {
 	_typeId = __FUNCTION__;
 }
@@ -60,6 +61,8 @@ MM_EnvironmentVLHGC::MM_EnvironmentVLHGC(J9JavaVM *javaVM)
 	, _rsclBufferControlBlockCount(0)
 	, _rememberedSetCardBucketPool(NULL)
 	, _lastOverflowedRsclWithReleasedBuffers(NULL)
+	, _previousPgcPerGmpCount(0)
+	, _heapSizingData()
 {
 	_typeId = __FUNCTION__;
 }

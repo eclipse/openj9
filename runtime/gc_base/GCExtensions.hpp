@@ -156,7 +156,7 @@ public:
 	UDATA deadClassLoaderCacheSize;
 #endif /*defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING) */
 
-
+	bool statupPhaseFinished; /**< Used to indicate if the JIT startup phase is finished */
 
 	MM_UnfinalizedObjectList* unfinalizedObjectLists; /**< The global linked list of unfinalized object lists. */
 	
@@ -164,6 +164,9 @@ public:
 
 	MM_Wildcard* numaCommonThreadClassNamePatterns; /**< A linked list of thread class names which should be associated with the common context */
 
+#if defined(J9VM_GC_VLHGC)
+	UDATA tarokTargetMaxPauseTime; /**< An optional, user specified soft max pause time for PGC's in balanced GC*/
+#endif /* J9VM_GC_VLHGC */
 	struct {
 		MM_UserSpecifiedParameterUDATA _Xmn; /**< Initial value of -Xmn specified by the user */
 		MM_UserSpecifiedParameterUDATA _Xmns; /**< Initial value of -Xmns specified by the user */
@@ -229,6 +232,8 @@ public:
 	virtual void identityHashDataRemoveRange(MM_EnvironmentBase* env, MM_MemorySubSpace* subspace, UDATA size, void* lowAddress, void* highAddress);
 
 	void updateIdentityHashDataForSaltIndex(UDATA index);
+
+	void setStartpPhaseFinished(){ statupPhaseFinished = true; }
 
 	/**
 	 * Set Tenure address range
@@ -313,9 +318,13 @@ public:
 #if defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING)
 		, deadClassLoaderCacheSize(1024 * 1024) /* default is one MiB */
 #endif /* defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING) */
+		, statupPhaseFinished(false)
 		, unfinalizedObjectLists(NULL)
 		, objectListFragmentCount(0)
 		, numaCommonThreadClassNamePatterns(NULL)
+#if defined(J9VM_GC_VLHGC)
+        , tarokTargetMaxPauseTime(200)
+#endif /* J9VM_GC_VLHGC */
 		, stringDedupPolicy(J9_JIT_STRING_DEDUP_POLICY_UNDEFINED)
 		, _asyncCallbackKey(-1)
 		, _TLHAsyncCallbackKey(-1)

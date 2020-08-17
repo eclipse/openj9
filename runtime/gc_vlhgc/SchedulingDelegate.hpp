@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -47,6 +47,7 @@ private:
 	bool _nextIncrementWillDoPartialGarbageCollection; /**< Record whether a PGC is planned for the next taxation point */
 	bool _nextIncrementWillDoGlobalMarkPhase; /**< Record whether a GMP increment is planned for the next taxation point */
 	bool _nextPGCShouldCopyForward;	/**< True if the next PGC increment will be attempted using copy-forward (read and set when PGC starts).  False implies compaction will be used, instead */
+	bool _currentlyPerformingGMP; /**< Set to true when a GMP cycle is active */
 	bool _globalSweepRequired;	/**< Set when a GMP finishes so that the next PGC to run knows that it is responsible for the first global sweep on the new mark map */
 	bool _disableCopyForwardDuringCurrentGlobalMarkPhase; /**< Set to true when a PGC Abort happens during GMP. Reset only when GMP is complete. */
 	UDATA _idealEdenRegionCount;	/**< The ideal number of regions for eden space at the current heap size */
@@ -54,6 +55,7 @@ private:
 	UDATA _edenRegionCount; /**< The current size of Eden, in regions */
 	double _edenSurvivalRateCopyForward;	/**< The running average ratio of the number of regions consumed to copy-forward Eden to the number of regions allocated as Eden */
 	UDATA _nonEdenSurvivalCountCopyForward;	/**< The running average count of the number of non-Eden regions allocated by copy-forward for its survival set (Eden regions are excluded since they are tracked with _edenSurvivalRateCopyForward) */
+	UDATA _numberOfHeapRegions; /**< The number of heap regions according to the region manager */
 
 	UDATA _previousReclaimableRegions; /**< The number of reclaimable regions at the end of the last reclaim. Used to estimate consumption rate. */
 	UDATA _previousDefragmentReclaimableRegions; /**< The number of reclaimable regions in the defragment set at the end of the last reclaim. Used to estimate GMP kickoff and compact rate. */
@@ -75,11 +77,30 @@ private:
 	double _scannableBytesRatio;			/**< Ratio of scannable byte vs total bytes (scannable + non-scannable) as measured from past */
 	U_64 _historicTotalIncrementalScanTimePerGMP;  /**< Historic average of the total wall-clock time we spend scanning in all stop-the-world global mark increments over a GMP cycle in microseconds */
 	UDATA _historicBytesScannedConcurrentlyPerGMP; /**< Historic average amount of bytes we scan concurrently per GMP cycle */
+	UDATA _estimatedFreeTenure; /**< The amount of free memory we estimate in the total heap - includes some headroom for GMP kickoff */
+
+	double _maxEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the maximum percentage of the heap that can be taken by eden */
+	double _minEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the minimum percentage of the heap that can be taken by eden */
 
 	U_64 _partialGcStartTime;  /**< Start time of the in progress Partial GC in hi-resolution format (recorded to track total time spent in Partial GC) */
-	U_64 _historicalPartialGCTime;  /**< Weighted historical average of Partial GC times */
+	double _partialGcOverhead; /**< Used to keep track of relative Partial GC overhead. Is calculated by dividing total time spent in a single PGC phase, by the time interval since the end of the previous PGC */
+	U_64 _historicalPartialGCTime;  /**< Weighted historical average of Partial GC times, measured in ms */
+
+	U_64 _globalMarkIncrementsTotalTime; /**< Agregate of time spent doing GMP increments for current phase */
+	U_64 _globalMarkIntervalStartTime; /**< Time interval between start of sucessive GMP increments */
+	double _globalMarkOverhead; /**< Used to keep track of relative Global Mark overhead. Is calculated by dividing total time spent in Global Mark increments, Concurrent GMP work, and global sweep, by the time interval since the completion of the last global mark  */
+	U_64 _globalSweepTimeUs; /**< Used to keep track of time spent doing global sweep, corresponding to previous GMP cycle */
+	U_64 _concurrentMarkGCThreadsTotalWorkTime; /**< Sum of all time intervals (cpu) for GC threads doing concurrent work */
 
 	UDATA _dynamicGlobalMarkIncrementTimeMillis;  /**< The dynamically calculated current time to be spent per GMP increment (subject to change over the course of the run) */
+
+	double _pgcTimeIncreasePerEdenRegionFactor; /**< Used to keep track of how much pgc time will increase as eden size increases */
+
+	intptr_t _edenSizeFactor; /**< Used to indicate how far eden should increase or decrease from current value. Positive values indicate max eden should be larger, while - values indicate max eden should shrink. Value corresponds to number of regions */
+	UDATA _pgcCountSinceGMPEnd; /**< Counts the number of PGC's from end of last GMP cycle, to the end of current(next) GMP cycle */
+	U_64 _averagePgcInterval; /**< The average interval time between start of 2 consecutive PGC's, measured in Us */
+
+	U_64 _totalGMPWorkTimeUs; /**< Represents the total time that the previous GMP cycle took. Includes concurrent work, increments of work, and global sweep time  */
 
 	struct MM_SchedulingDelegate_ScanRateStats {
 		UDATA historicalBytesScanned;		/**< Historical number of bytes scanned for mark operations */
@@ -110,6 +131,13 @@ public:
 	 */
 	void updateCurrentMacroDefragmentationWork(MM_EnvironmentVLHGC *env, MM_HeapRegionDescriptorVLHGC *region);
 
+	/**
+	 * Updates statistics required for total heap sizing
+	 */ 
+	void updateHeapSizingData(MM_EnvironmentVLHGC *env); 
+
+	UDATA getPgcCountSinceGMPEnd(MM_EnvironmentVLHGC *env) { return _pgcCountSinceGMPEnd; }
+
 private:
 	/**
 	 * Internal helper for determining the next taxation threshold. This does all
@@ -129,6 +157,52 @@ private:
 	 * @return The estimated number of bytes which a global collect would need to scan (based on live bytes, heap occupancy trends, and the ratio of scannable bytes)
 	 */
 	double calculateEstimatedGlobalBytesToScan() const;
+
+	/**
+	 * Aim to find the eden size with the best blend of gc overhead (% of time gc is active relative to mutators), and pgc average time
+	 * @return The recommended eden size (in bytes) given the current heap sizing (eden, tenure, etc), and PGC and GMP data.
+	 */ 
+	UDATA calculateRecommendedEdenSize(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * @return The predicted overhead (% of time gc is active relative to mutators) if eden changes by 'edenChange' bytes
+	 * @param env[in] The main GC thread
+	 * @param currentEdenSize The current size of eden, in bytes
+	 * @param edenSizeChange How far away from currentEdenSize we want to observe overhead
+	 * @param freeTenure The amount of free space in tenure, in bytes
+	 * @param pgcAvgIntervalTime The observed avg time between PGC's (in us) since the last GMP ended
+	 */ 
+	double predictCpuOverheadForEdenSize(MM_EnvironmentVLHGC *env, UDATA currentEdenSize, intptr_t edenSizeChange, UDATA freeTenure, U_64 pgcAvgIntervalTime);
+
+	/**
+	 * @return The predicted interval between PGC collections. We expect the interval between collections to be linearly related to how much eden grows
+	 * 	ie, if we double eden size, we expect the interval between collections to double as well
+	 * @param env[in] The main GC thread
+	 * @param currentEdenSize The current eden size, in bytes
+	 * @param edenSizeChange How much we want to increase/decrease eden by, in bytes
+	 * @param pgcAvgIntervalTime The observed pgc avg interval time
+	 */ 
+	double predictIntervalBetweenCollections(MM_EnvironmentVLHGC *env, UDATA currentEdenSize, intptr_t edenSizeChange, U_64 pgcAvgIntervalTime);
+
+	/**
+	 * @return The predicted number of PGC collections per GMP cycle. We expect the number of PGC collections to be proportional to free tenure.
+	 * ie, if we have twice as much free tenure given the new eden size, we would expect twice as many PGC collections
+	 * @param env[in] The main GC thread
+	 * @param currentEdenSize The current eden size, in bytes
+	 * @param edenSizeChange How much we want to increase/decrease eden by, in bytes
+	 * @param freeTenure How much free tenure we have
+	 */ 
+	double predictNumberOfCollections(MM_EnvironmentVLHGC *env, UDATA currentEdenSize, intptr_t edenSizeChange, UDATA freeTenure);
+
+	/**
+	 * @return The predicted avg time that PGC will take, if eden becomes currentEdenSize +/- edenSizeChange
+	 * PGC time is somewhat dependent on eden size. Larger eden will typically take more time to collect than smaller eden.
+	 * We can use this general observation to get a rough estimate of how long PGC will take
+	 * @param env[in] The main GC thread
+	 * @param currentEdenSize The current size of eden
+	 * @param edenSizeChange How much we want to increase/decrease eden by, in bytes
+	 */
+	double predictPgcTime(MM_EnvironmentVLHGC *env, UDATA currentEdenSize, intptr_t edenSizeChange); 
 
 	/**
 	 * @return The estimated number of bytes which we have remaining to scan for the current GMP cycle.  
@@ -202,6 +276,56 @@ private:
 	void calculateEdenSize(MM_EnvironmentVLHGC *env);
 
 	/**
+	 * Compute what the ideal eden size should be, and set _edenSizeFactor accordingly
+	 * @param env[in] the main GC thread
+	 * @param edenChangeSpeed How quickly eden should jump from current eden size to the ideal eden size. edenChangeSpeed must be between 0 and 1. 
+	 * 0.1 indicates that current eden size should move a little bit towards ideal eden size
+	 * 0.9 indicates that current eden size should move very aggresively towards ideal eden size
+	 * 0.5 indicates that current eden size should move halfway towards ideal eden size
+	 */
+	void moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, double edenChangeSpeed);
+
+	/**
+	 * Following a PGC, check how PGC overhead and PGC times are behaving, and modyfing _edenSizeFactor to increase/decrease eden size if needed
+	 * @param env[in] the main GC thread
+	 * @param globalSweepHappened true if a global sweep was performed during the PGC that just completed
+	 */
+	void checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool globalSweepHappened);
+
+	/**
+	 * Maps a pgc time, to a corresponding GC overhead (as a % of time being active). This is used for calculating hybrid eden overhead.
+	 * Depending on if the heap is fully expanded (ie, heap size >= Xsoftmx), the returned overhead will take a slightly different meaning
+	 * @param env[in] the main GC thread
+	 * @param partialGcTimeMs the pgc time in Ms that needs to be mapped to an overhead, measured in ms
+	 * @return PGC overhead corresponding to pgc time, as a % between 0 and 100
+	 */
+	double mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, UDATA partialGcTimeMs);
+
+	/**
+	 * Blends a pgc average time, and a GC overhead, and returns the hybrid overhead of the 2 values.
+	 * Note that if heap is fully expanded (current heap size > softmx/mx), the returned values mean slightly different things
+	 * @param env[in] the main GC thread
+	 * @param partialGcTimeMs the pgc time in Ms that needs to be mapped to an overhead, measured in ms
+	 * @param overhead The overhead we need to blend. Must be value between 0 and 1
+	 * @return Hybrid overhead for pgc avg time and pgc overhead, as a % between 0 and 1
+	 */ 
+	double calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, UDATA partialGcTimeMs, double overhead);
+
+	/**
+	 * Modify the _idealEdenRegionCount count based on _edenSizeFactor. If _edenSizeFactor is postive, we increase eden. 
+	 * If _edenSizeFactor is negative, we shrink eden.  
+	 * Eden will be bounded by _maxEdenPercent and _minEdenPercent, or by any -Xmn/s/x options if provided
+	 * @param env[in] the main GC thread
+	 */
+	void adjustIdealEdenRegionCount(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Returns true if the heap is fully expanded
+	 * @param env[in] the main GC thread
+	 */
+	bool heapIsFullyExpanded(MM_EnvironmentVLHGC *env);
+
+	/**
 	 * Calculate the new Global Mark increment time given the most recent Partial GC time.
 	 * Attempt to keep the GMP times in line with the times in PGC.  Keep track of a weighted
 	 * historic average and set the new GMP increment time to be a result of the adjusted
@@ -230,6 +354,12 @@ private:
 	 * @param env[in] the main GC thread
 	 */
 	void updateGMPStats(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Updates statistics used to predict PGC time, with the PGC historic time. 
+	 * @param env[in] the main GC thread
+	 */ 
+	void updatePgcTimePrediction(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * Called after a copy forward rate to update the averageCopyForwardRate
@@ -382,11 +512,39 @@ public:
 	 */
 	bool isGlobalSweepRequired() { return _globalSweepRequired; }
 
+	/*
+	 * Sets the time taken for global sweep in microseconds
+ 	 */
+	void setGlobalSweepTime(U_64 globalSweepTime) { _globalSweepTimeUs = globalSweepTime; }
+
+	/*
+	 * Adds the time taken for concurrent mark
+	 */
+	void setConcurrentGlobalMarkTime(U_64 concurrentMarkTotalTime) { _concurrentMarkGCThreadsTotalWorkTime = concurrentMarkTotalTime; }
+
 	/**
 	 * Inform the receiver that a copy-forward cycle has completed
 	 * @param env[in] the main GC thread
 	 */
 	void copyForwardCompleted(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Inform the receiver that a Global Mark phase is starting
+	 * @param env[in] the main GC thread
+	 */ 
+	void globalMarkCycleStart(MM_EnvironmentVLHGC *env);
+
+	/**
+	 *  Calculate GMP overhead
+	 *  @param env[in] the main GC thread
+	 */
+	void calculateGlobalMarkOverhead(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Inform the receiver that a Global Mark phase is ending
+	 * @param env[in] the main GC thread
+	 */ 
+	void globalMarkCycleEnd(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * Inform the receiver that a Global Mark Phase has completed and that a GMP intermission should begin
@@ -399,7 +557,7 @@ public:
 	 * @param env[in] the main GC thread
 	 */
 	void globalMarkIncrementCompleted(MM_EnvironmentVLHGC *env);
-	
+
 	/**
 	 * Inform the receiver that a Global GC has completed.
 	 * @param env[in] the main GC thread
@@ -413,6 +571,19 @@ public:
 	 * @param env[in] the main GC thread
 	 */
 	void partialGarbageCollectStarted(MM_EnvironmentVLHGC *env);
+	
+
+	/**
+	 *  Calculate interval between consecutive start PGC increment starts, and calculate PGC overhead
+	 *  @param env[in] the main GC thread
+	 */
+	void calculatePartialGarbageCollectOverhead(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Resets statistics which keep track of PGC count
+	 * @param env[in] the main GC thread 
+	 */ 
+	void resetPgcTimeStatistics(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * Inform the receiver that a Partial GC has completed.
@@ -442,6 +613,13 @@ public:
 	 * @return The current size of Eden, in bytes
 	 */
 	UDATA getCurrentEdenSizeInBytes(MM_EnvironmentVLHGC *env);
+
+	/**
+	 * Used to request the size, in bytes, of the ideal calculated Eden space.
+	 * @param env[in] The main GC thread
+	 * @return The ideal size of Eden, in bytes
+	 */
+	UDATA getIdealEdenSizeInBytes(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * Used to request the size, in regions, of the active calculated Eden space.

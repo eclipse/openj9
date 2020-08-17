@@ -285,6 +285,9 @@ MM_ConfigurationIncrementalGenerational::initialize(MM_EnvironmentBase *env)
 #define DEFAULT_MAX_AGE_FOR_PGC_COUNT_BASED				24
 #define DEFAULT_MAX_NURSERY_AGE							1
 #define DEFAULT_MAX_AGE_FOR_ALLOCATION_BASED			5
+#define DEFAULT_PGC_RATIO_FOR_EDEN_EXPANSION			0.07
+#define DEFAULT_PGC_RATIO_FOR_EDEN_CONTRACTION			0.02
+#define DEFAULT_PGC_PAUSE_TIME_TARGET					200
 
 	/* set default region maximum age if it is not specified yet */
 	if (0 == extensions->tarokRegionMaxAge) {
@@ -309,6 +312,14 @@ MM_ConfigurationIncrementalGenerational::initialize(MM_EnvironmentBase *env)
 		/* default to a region size.  No real reason for choosing this number other than that it is sized relative to the heap */
 		extensions->tarokMinimumGMPWorkTargetBytes._valueSpecified = extensions->regionSize;
 	}
+
+	if (!extensions->dnssExpectedTimeRatioMaximum._wasSpecified) {
+		extensions->dnssExpectedTimeRatioMaximum._valueSpecified = DEFAULT_PGC_RATIO_FOR_EDEN_EXPANSION;
+	} 
+
+	if (!extensions->dnssExpectedTimeRatioMinimum._wasSpecified) {
+		extensions->dnssExpectedTimeRatioMinimum._valueSpecified = DEFAULT_PGC_RATIO_FOR_EDEN_CONTRACTION;
+	} 
 
 	return result;
 }

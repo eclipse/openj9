@@ -1,6 +1,6 @@
 
 /*******************************************************************************
- * Copyright (c) 1991, 2019 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -60,6 +60,8 @@ private:
 
 	MM_HeapRegionManager *_heapRegionManager;	/**< Stored so that we can resolve the table descriptor for given addresses when asked for a pool corresponding to a specific address */
 	MM_LightweightNonReentrantLock _expandLock; /**< Most of the common expand code is not multi-threaded safe (since it used in standard collectors on alloc path fail path which is single threaded)  */
+	double _lastObservedGcPercentage; /**< The most recently observed GC percentage (time gc is active / time gc is not active) */
+	U_64 _previouslyObservedPGCCount; /**< The count of observed PGC's since the last GMP cycle - Used to determine if heap resize occured after a system/global gc */
 
 protected:
 public:
@@ -70,18 +72,76 @@ private:
 	UDATA adjustExpansionWithinFreeLimits(MM_EnvironmentBase *env, UDATA expandSize);
 	UDATA adjustExpansionWithinSoftMax(MM_EnvironmentBase *env, UDATA expandSize, UDATA minimumBytesRequired);
 	UDATA checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytesRequired);	
-	bool checkForRatioContract(MM_EnvironmentBase *env);
-	UDATA calculateExpandSize(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy);
-	
+	UDATA calculateExpansionSizeInternal(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy);
+
+
+	/**
+	 * @return Current GC percentage expressed as value between 0-100
+	 */
+	double calculateCurrentGcPct(MM_EnvironmentBase *env) { return calculateGcPctForHeapChange(env, 0); }
+
+	/**
+	 *	Calculates the GC percentage if the heap were to change "heapSizeChange" bytes.
+	 *  Uses values in VLHGCEnvironment to get most accurate GC percentage available, and resorts to alternative methods if these stats are unavailable
+	 *  @param heapSizeChange represents how many bytes we increase/decrease the heap by
+	 *  @return GC percentage expressed as a value between 0 and 100, that will occur if we change heap by heapSizeChange bytes. 
+	 */
+	double calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDATA heapSizeChange);
+
+	/**
+	 * Calculate by how many bytes we should change the current heap size. 
+	 * @return positive number of bytes representing how many bytes the heap should expand. 
+	 * 		   If heap should contract, a negative representing how many bytes the heap should contract is returned.
+	 */
+	IDATA calculateHeapSizeChange(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC);
+
+	/**
+	 * Calculate the 'hybrid overhead' for the current heap size. It is a hybrid value combining gc ratio, and free tenure heap space 
+	 * @return the current hybrid heap overhead
+	 */
+	double calculateCurrentHybridHeapOverhead(MM_EnvironmentBase *env) { return calculateHybridHeapOverhead(env, 0); }
+
+	/**
+	 * Calculates the hybrid heap if the heap were to change by heapSizeChange bytes. 
+	 * The hybrid heap score is a value which blends free memory % and gc %, giving each appropriate weight depending on user specified thresholds
+	 * @param heapSizeChange by how many bytes the heap will change
+	 * @return the hybrid heap overhead if the heap were to change by heapSizeChange bytes
+	 */ 
+	double calculateHybridHeapOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange);
+
+	/**
+	 * Maps free memory percentage into a "equivalent" gc percentage. 
+	 * Memory is measured as thought it would change by heapSizeChange bytes. If "tenure" currently is 2G, and 1G is free, while heapSizeChange is +1G
+	 * Memory will be mapped as though "tenure" changed by 1G (ie, Tenure is 3G, and 2G is free)
+	 * @param heapSizeChange how much the heapSize will change. If passing in 0, this function will return the current memory overhead
+	 * @return the mapped value of free memory to gc%
+	 */ 
+	double mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange);
+
+	/**
+	 * @return the number of bytes by which the heap should expand. Return 0 if expansion is not desired, or not possible.
+	 */ 
+	UDATA calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc); 
+
+	/**
+	 * @param shouldIncreaseHybridHeapScore informs the function that it should try to contract in order to meet the hybrid heap score requirements. If this is set to false, then we enter this function only to meet -Xsoftmx
+	 * @return the number of bytes by which the heap should contract. Return 0 if contraction is not desired, or not possible
+	 */
+	IDATA calculateContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC, bool shouldIncreaseHybridHeapScore);
+
+	/**
+	 * Attempts to calculate what size of heap will give a hybrid heap score within the acceptable bounds (between heapExpansionGCTimeThreshold and heapContractionGCTimeThreshold). 
+	 * @return size of heap that acheives a hybrid heap score within acceptable range. 0 is returned if it is not possible to get heap to a range with an acceptable heap score
+	 */ 
+	UDATA getHeapSizeWithinBounds(MM_EnvironmentBase *env);
+
 	/**
 	 * Determine how much space we need to expand the heap by on this GC cycle to meet the collector's requirement.
 	 * @param env[in] the current thread  
 	 * @return Number of bytes required
 	 */
 	UDATA calculateCollectorExpandSize(MM_EnvironmentBase *env);
-	UDATA calculateTargetContractSize(MM_EnvironmentBase *env, UDATA allocSize, bool ratioContract);
-	bool timeForHeapContract(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC);
-	bool timeForHeapExpand(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);	
+	UDATA calculateTargetContractSize(MM_EnvironmentBase *env, UDATA allocSize);
 	UDATA performExpand(MM_EnvironmentBase *env);
 	UDATA performContract(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);
 
@@ -246,6 +306,7 @@ public:
 		, _allocateAtSafePointOnly(false)
 		, _bytesRemainingBeforeTaxation(0)
 		, _heapRegionManager(heapRegionManager)
+		, _lastObservedGcPercentage(0)
 	{
 		_typeId = __FUNCTION__;
 	}
