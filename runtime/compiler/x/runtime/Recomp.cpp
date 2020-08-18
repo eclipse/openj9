@@ -256,7 +256,7 @@ void J9::Recompilation::methodHasBeenRecompiled(void *oldStartPC, void *newStart
          helperAddr = TR::CodeCacheManager::instance()->findHelperTrampoline(SAMPLING_PATCH_CALL_SITE, p);
          }
 #endif
-
+      //TODO: create and if else case, handling the if(bodyInfo->isMJITCompiledMethod) separately from the TR GCR case
       offset = ((char*)helperAddr) - p - 4;
 
       *((uint32_t*)p) = offset;

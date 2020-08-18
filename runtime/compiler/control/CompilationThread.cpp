@@ -4706,6 +4706,7 @@ TR::CompilationInfo::addMethodToBeCompiled(TR::IlGeneratorMethodDetails & detail
       cur->_jitStateWhenQueued = getPersistentInfo()->getJitState();
 
       bool isJNINativeMethodRequest = false;
+      // TODO: MJIT GCR
       if (pc)
          {
          J9::PrivateLinkage::LinkageInfo *linkageInfo = J9::PrivateLinkage::LinkageInfo::get(pc);
@@ -9030,17 +9031,14 @@ TR::CompilationInfoPerThreadBase::mjit(
 #define MAX_BUFFER_SIZE 1024
          // zeroed buffer for generated code
          MJIT::CodeGenGC mjitCGGC(logFileFP);
-         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC);
-         char *buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
-         memset(buffer, 0, MAX_BUFFER_SIZE);
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC, this->getCompilation()->getPersistentInfo());
+         char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          codeCache = mjit_cg.getCodeCache();
 
          // provide enough space for CodeCacheMethodHeader
          char *cursor = &buffer[sizeof(OMR::CodeCacheMethodHeader)];
 
          buffer_size_t buffer_size = 0;
-
-         TR_PersistentJittedBodyInfo *bodyInfo;
                
          char *magicWordLocation, *first2BytesPatchLocation;
          buffer_size_t code_size = mjit_cg.generatePrePrologue(
@@ -9078,7 +9076,8 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          //MicroJIT only supports x86-64 at this moment
          mjit_cg.setPeakStackSize(romMethod->maxStack * mjit_cg.getPointerSize());
-         char *firstInstructionLocation = NULL;
+         char* firstInstructionLocation = NULL;
+         char* samplingRecompileCallLocation = NULL;
 
          code_size = mjit_cg.generatePrologue(
             cursor,
@@ -9087,6 +9086,7 @@ TR::CompilationInfoPerThreadBase::mjit(
             magicWordLocation,
             first2BytesPatchLocation,
             &firstInstructionLocation,
+            &samplingRecompileCallLocation,
             &bcIterator);
          MJIT_COMPILE_ERROR(code_size, method);
 

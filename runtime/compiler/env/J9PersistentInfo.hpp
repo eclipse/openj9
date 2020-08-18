@@ -88,6 +88,10 @@ class PersistentInfo : public OMR::PersistentInfoConnector
 #pragma warning( suppress : 4351 )
          _paddingBefore(),
          _countForRecompile(0),
+#if defined(J9VM_OPT_MICROJIT)
+         _isMJITCompiled(false),
+         _sampledRecompileCallOffset(0),
+#endif /* defined(J9VM_OPT_MICROJIT) */
          _numLoadedClasses(0),
          _classLoadingPhase(false),
          _inlinerTemporarilyRestricted(false),
@@ -276,6 +280,12 @@ class PersistentInfo : public OMR::PersistentInfoConnector
       else
          _runtimeInstrumentationRecompilationEnabled = false;
       }
+#if defined(j9VM_OPT_MICROJIT)
+   bool isMJITCompiledMethod() { return _isMJITCompiled; }
+   void setIsMJITCompiledMethod(bool b) { _isMJITCompiled = b; }
+   int8_t getSampledRecompileCallOffset() { return _sampledRecompileCallOffset; }
+   void setSampledRecompileCallOffset(int8_t offset) { _sampledRecompileCallOffset = offset; }
+#endif /* defined(j9VM_OPT_MICROJIT) */
 
 
    bool getInlinerTemporarilyRestricted() const { return _inlinerTemporarilyRestricted; }
@@ -310,6 +320,12 @@ class PersistentInfo : public OMR::PersistentInfoConnector
 #endif /* defined(J9VM_OPT_JITSERVER) */
 
    private:
+#if defined(J9VM_OPT_MICROJIT)
+   bool _isMJITCompiled;
+   int8_t _sampledRecompileCallOffset;
+#endif /* defined(J9VM_OPT_MICROJIT) */
+
+
    TR_AddressSet *_unloadedClassAddresses;
    TR_AddressSet *_unloadedMethodAddresses;
 

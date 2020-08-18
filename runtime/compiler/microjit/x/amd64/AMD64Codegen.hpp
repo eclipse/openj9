@@ -84,10 +84,11 @@ class CodeGenerator {
         TR_J9VMBase& _vm;
         TR::CodeCache *_codeCache;
         int32_t _stackPeakSize;
-        ParamTable *_paramTable;
-        TR::Compilation *_comp;
-        MJIT::CodeGenGC *_mjitCGGC;
-        TR::GCStackAtlas *_atlas;
+        ParamTable* _paramTable;
+        TR::Compilation* _comp;
+        MJIT::CodeGenGC* _mjitCGGC;
+        TR::GCStackAtlas* _atlas;
+        TR::PersistentInfo* _persistentInfo;
 
         buffer_size_t generateSwitchToInterpPrePrologue(
             char*,
@@ -196,7 +197,16 @@ class CodeGenerator {
 
     public:
         CodeGenerator() = delete;
-        CodeGenerator(struct J9JITConfig*, J9VMThread*, TR::FilePointer*, TR_J9VMBase&, ParamTable*, TR::Compilation*, MJIT::CodeGenGC*);
+        CodeGenerator(
+            struct J9JITConfig*, 
+            J9VMThread*, 
+            TR::FilePointer*, 
+            TR_J9VMBase&, 
+            ParamTable*, 
+            TR::Compilation*, 
+            MJIT::CodeGenGC*,
+            TR::PersistentInfo*
+        );
 
         inline void 
         setPeakStackSize(int32_t newSize)
@@ -222,11 +232,11 @@ class CodeGenerator {
          */
         buffer_size_t 
         generatePrePrologue(
-            char *buffer,
-            J9Method *method,
-            char **magicWordLocation,
-            char **first2BytesPatchLocation,
-            TR_PersistentJittedBodyInfo **bodyInfo
+            char* buffer,
+            J9Method* method,
+            char** magicWordLocation,
+            char** first2BytesPatchLocation,
+            char** samplingRecompileCallLocation
         );
 
         /**
@@ -243,13 +253,14 @@ class CodeGenerator {
          */
         buffer_size_t 
         generatePrologue(
-            char *buffer, 
-            J9Method *method, 
-            char **jitStackOverflowJumpPatchLocation,
-            char *magicWordLocation,
-            char *first2BytesPatchLocation,
-            char **firstInstLocation,
-            TR_J9ByteCodeIterator *bci
+            char* buffer, 
+            J9Method* method, 
+            char** jitStackOverflowJumpPatchLocation,
+            char* magicWordLocation,
+            char* first2BytesPatchLocation,
+            char* samplingRecompileCallLocation,
+            char** firstInstLocation,
+            MJIT::ByteCodeIterator* bci
         );
 
         /**
@@ -321,6 +332,18 @@ class CodeGenerator {
         {
             return _linkage._properties.getPointerSize();
         }
+
+        /**
+         * Used to patch the address after a recompilation.
+         */
+        static buffer_size_t
+        trampolinePatch(void* oldJitStartAddress);
+
+        /**
+         * Generates a gaurded counter for recompilation through JITed counting.
+         */
+        buffer_size_t
+        generateGCR(void* oldJitStartAddress, TR::FilePointer* logFileFP, void* newJitStartAddress);
 };
 
 class MJITCompilationFailure: public virtual std::exception {

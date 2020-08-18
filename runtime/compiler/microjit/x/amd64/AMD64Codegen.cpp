@@ -62,7 +62,7 @@
     size += INSTRUCTION##Size;\
 } while(0)
 
-#define PATCH_RELATIVE_ADDR(buffer, INSTRUCTION, absAddress) do {\
+#define PATCH_RELATIVE_ADDR(buffer, absAddress) do {\
     intptr_t relativeAddress = (intptr_t)(buffer);\
     intptr_t minAddress = (relativeAddress < (intptr_t)(absAddress)) ? relativeAddress : (intptr_t)(absAddress);\
     intptr_t maxAddress = (relativeAddress > (intptr_t)(absAddress)) ? relativeAddress : (intptr_t)(absAddress);\
@@ -628,6 +628,64 @@ MJIT::LocalTable::getLocalCount()
     return _localCount;
 }
 
+buffer_size_t 
+MJIT::CodeGenerator::trampolinePatch(char* oldJitStartAddress, J9::PersistentInfo* bodyInfo)
+{
+    buffer_size_t size = 0;
+    uintptr_t samplingRecompileMethodLocation = (uintptr_t)oldJitStartAddress + bodyInfo->getSampledRecompileCallOffset();
+    char* oldJitToJitStartAddress = (char*)((UDATA)oldJitStartAddress + (((U_32*)oldJitStartAddress)[-1] >> 16));
+    COPY_TEMPLATE(oldJitToJitStartAddress, jump4ByteRel, size);
+    PATCH_RELATIVE_ADDR(oldJitToJitStartAddress, samplingRecompileMethodLocation);
+    return size;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateGCR(
+    char* buffer,
+    U_32 initialCount
+){
+    // see TR_J9ByteCodeIlGenerator::prependGuardedCountForRecompilation(TR::Block * originalFirstBlock)
+    // guardBlock:           if (!countForRecompile) goto originalFirstBlock;
+    // bumpCounterBlock:     count--;
+    //                       if (bodyInfo->count > 0) goto originalFirstBlock;
+    // callRecompileBlock:   call jitRetranslateCallerWithPreparation(j9method, startPC);
+    //                       bodyInfo->count=10000
+    //                       goto originalFirstBlock
+    // bumpCounter:          count
+    // originalFirstBlock:   ...
+    //
+    buffer_size_t size = 0;
+
+    //guard block
+    COPY_TEMPLATE(buffer, checkCountAndRecompile, size);
+    char* guardBlock = buffer;
+
+    //bumpCounterBlock
+    COPY_TEMPLATE(buffer, loadCounter, size);
+    char* counterLoader = buffer;
+    COPY_TEMPLATE(buffer, decrementCounter, size);
+    COPY_TEMPLATE(buffer, jgCount, size);
+
+    //callRecompileBlock
+    COPY_TEMPLATE(buffer, callRetranslate, size);
+    COPY_TEMPLATE(buffer, setCounter, size);
+    char* counterSetter = buffer;
+    COPY_TEMPLATE(buffer, jmpToBody, size);
+
+    //counter
+    char* counterLocation = buffer;
+    COPY_IMM4_TEMPLATE(buffer, size, initialCount);
+
+    // Find the countForRecompile's address and patch for the guard block.
+    PATCH_RELATIVE_ADDR(guardBlock, (&(_persistentInfo->_countForRecompile)));
+    PATCH_RELATIVE_ADDR(counterLoader, counterLocation);
+    PATCH_RELATIVE_ADDR(counterSetter, counterLocation);
+
+    // TODO: Find TR's helper for patching caller.
+
+    return size;
+}
+
 buffer_size_t
 MJIT::CodeGenerator::saveArgsInLocalArray(
     char *buffer,
@@ -851,13 +909,14 @@ MJIT::CodeGenerator::loadArgsFromStack(
 }
 
 MJIT::CodeGenerator::CodeGenerator(
-    struct J9JITConfig *config, 
-    J9VMThread *thread, 
-    TR::FilePointer *fp, 
-    TR_J9VMBase &vm, 
-    ParamTable *paramTable,
-    TR::Compilation *comp,
-    MJIT::CodeGenGC *mjitCGGC
+    struct J9JITConfig* config, 
+    J9VMThread* thread, 
+    TR::FilePointer* fp, 
+    TR_J9VMBase& vm, 
+    ParamTable* paramTable,
+    TR::Compilation* comp,
+    MJIT::CodeGenGC* mjitCGGC,
+    TR::PersistentInfo* persistentInfo
     ):_linkage(Linkage(config, thread, fp))
     ,_logFileFP(fp)
     ,_vm(vm)
@@ -867,6 +926,7 @@ MJIT::CodeGenerator::CodeGenerator(
     ,_comp(comp)
     ,_mjitCGGC(mjitCGGC)
     ,_atlas(NULL)
+    ,_persistentInfo(persistentInfo)
 {
     _linkage._properties.setOutgoingArgAlignment(lcm(16, _vm.getLocalObjectAlignmentInBytes()));
 }
@@ -906,7 +966,7 @@ MJIT::CodeGenerator::generateSwitchToInterpPrePrologue(
 
     // Generate jump to the TR_i2jTransition function
     COPY_TEMPLATE(buffer, jump4ByteRel, switchSize);
-    PATCH_RELATIVE_ADDR(buffer, jump4ByteRel, j2iTransitionPtr);
+    PATCH_RELATIVE_ADDR(buffer, j2iTransitionPtr);
 
     margin += 2;
     uintptr_t requiredAlignment = 0;
@@ -928,11 +988,11 @@ MJIT::CodeGenerator::generateSwitchToInterpPrePrologue(
 
 buffer_size_t
 MJIT::CodeGenerator::generatePrePrologue(
-    char *buffer, 
-    J9Method *method, 
-    char **magicWordLocation,
-    char **first2BytesPatchLocation,
-    TR_PersistentJittedBodyInfo **bodyInfo
+    char* buffer,
+    J9Method* method,
+    char** magicWordLocation,
+    char** first2BytesPatchLocation,
+    char** samplingRecompileCallLocation
 ){
     // Return size (in bytes) of pre-proglue on success
 
@@ -998,25 +1058,23 @@ MJIT::CodeGenerator::generatePrePrologue(
     // 4-byte boundary, which is more than enough to ensure it can be patched
     // atomically.
     //
+    *samplingRecompileCallLocation = buffer;
     COPY_TEMPLATE(buffer, call4ByteRel, preprologueSize);
-    PATCH_RELATIVE_ADDR(buffer, call4ByteRel, samplingRecompileMethod);
+    PATCH_RELATIVE_ADDR(buffer, samplingRecompileMethod);
 
     // The address of the persistent method info is inserted in the pre-prologue
     // information. If the method is not to be compiled again a null value is
     // inserted.
-    *bodyInfo = TR_PersistentJittedBodyInfo::allocate(
-        nullptr,
-        TR_Hotness::noOpt, 
-        false, 
-        nullptr);
-    COPY_IMM8_TEMPLATE(buffer, preprologueSize, *bodyInfo);
+    J9::PersistentInfo *bodyInfo = _comp->getRecompilationInfo()->getJittedBodyInfo();
+    bodyInfo->setUsesGCR();
+    bodyInfo->setIsMJITCompiledMethod(true);
+    COPY_IMM8_TEMPLATE(buffer, preprologueSize, bodyInfo);
 
 
     // Allow 4 bytes for private linkage return type info. Allocate the 4 bytes
     // even if the linkage is not private, so that all the offsets are
     // predictable.
-    //TODO: This is missing something, does not match the TR magic word.
-    uint32_t magicWord = 0;
+    uint32_t magicWord = 0x00000020; // All MicroJIT compilations are set to recompile with GCR.
     switch(typeString[0]){
         case MJIT::VOID_TYPE_CHARACTER:
             COPY_IMM4_TEMPLATE(buffer, preprologueSize, magicWord | TR_VoidReturn);
@@ -1187,13 +1245,14 @@ MJIT::CodeGenerator::makeLocalTable(TR_J9ByteCodeIterator *bci, MJIT::LocalTable
  */
 buffer_size_t
 MJIT::CodeGenerator::generatePrologue(
-    char *buffer, 
-    J9Method *method, 
-    char **jitStackOverflowJumpPatchLocation,
-    char *magicWordLocation,
-    char *first2BytesPatchLocation,
-    char **firstInstLocation,
-    TR_J9ByteCodeIterator *bci
+    char* buffer, 
+    J9Method* method, 
+    char** jitStackOverflowJumpPatchLocation,
+    char* magicWordLocation,
+    char* first2BytesPatchLocation,
+    char* samplingRecompileCallLocation,
+    char** firstInstLocation,
+    MJIT::ByteCodeIterator* bci
 ){
     int prologueSize = 0;
     uintptr_t prologueStart = (uintptr_t)buffer;
@@ -1217,6 +1276,8 @@ MJIT::CodeGenerator::generatePrologue(
     
     //check for stack overflow
     *firstInstLocation = buffer;
+    J9::PersistentInfo *bodyInfo = _comp->getRecompilationInfo()->getJittedBodyInfo();
+    bodyInfo->setSampledRecompileCallOffset((int8_t)((uintptr_t)samplingRecompileCallLocation - (uintptr_t)buffer));
     COPY_TEMPLATE(buffer, cmpRspRbpDerefOffset, prologueSize);
     patchImm4(buffer, (U_32)(0x50));
     patchImm2(first2BytesPatchLocation, *(uint16_t*)(firstInstLocation));
@@ -1585,7 +1646,6 @@ MJIT::CodeGenerator::generateBody(char *buffer, TR_ResolvedMethod *method, TR_J9
                 return 0;
         }
     }
-    return codeGenSize;
 }
 
 buffer_size_t
@@ -1719,7 +1779,155 @@ MJIT::CodeGenerator::generateStore(char *buffer, TR_ResolvedMethod *method, TR_J
 }
 
 buffer_size_t
-MJIT::CodeGenerator::generateGetStatic(char *buffer, TR_ResolvedMethod *method, TR_J9ByteCodeIterator *bci)
+MJIT::CodeGenerator::generateArgumentMoveForStaticMethod(char* buffer, TR_ResolvedMethod* staticMethod, char* typeString, U_16 typeStringLength){
+    buffer_size_t argumentMoveSize = 0;
+
+    //Pull out parameters and find their place for calling
+    U_16 paramCount = MJIT::getParamCount(typeString, typeStringLength);
+    if(!paramCount){
+        return -1;
+    }
+    MJIT::ParamTableEntry paramTableEntries[paramCount];
+    int error_code = 0;
+    MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, typeStringLength, &error_code, paramTableEntries, paramCount, _logFileFP);
+    if(error_code){
+        return 0;
+    }
+    
+    //Move arguments from MJIT computation stack to registers and stack offsets for call
+    //TODO: Implement passing arguments on stack when surpassing register count.
+    if(paramCount > 4){
+        return 0;
+    }
+    for(int i = paramCount-1; i>=0; i--){
+        MJIT::ParamTableEntry entry = paramTableEntries[i];
+        switch(i){
+            case 0:
+                COPY_TEMPLATE(buffer, moveArg0ForCall, argumentMoveSize);
+                break;
+            case 1:
+                COPY_TEMPLATE(buffer, moveArg1ForCall, argumentMoveSize);
+                break;
+            case 2:
+                COPY_TEMPLATE(buffer, moveArg2ForCall, argumentMoveSize);
+                break;
+            case 3:
+                COPY_TEMPLATE(buffer, moveArg3ForCall, argumentMoveSize);
+                break;
+            default:
+                //TODO: Add stack argument passing here.
+                break;
+        }
+    }
+    return argumentMoveSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateInvokeStatic(char* buffer, TR_ResolvedMethod* method, MJIT::ByteCodeIterator* bci)
+{
+    buffer_size_t invokeStaticSize = 0;
+    int32_t cpIndex = (int32_t)bci->next2Bytes();
+
+    //Attempt to resolve the address at compile time. This can fail, and if it does we must fail the compilation for now.
+    //In the future research project we could attempt runtime resolution. TR does this with self modifying code.
+    //These are all from TR and likely have implications on how we use this address. However, we do not know that as of yet.
+    bool isUnresolvedInCP;
+    TR_ResolvedMethod* resolved = method->getResolvedStaticMethod(_comp, cpIndex, &isUnresolvedInCP);
+    if(!resolved) return 0;
+
+    //Get method signature
+    J9Method *ramMethod = static_cast<TR_ResolvedJ9Method*>(resolved)->ramMethod();
+    J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(ramMethod);
+    U_16 maxLength = J9UTF8_LENGTH(J9ROMMETHOD_SIGNATURE(romMethod));
+    char typeString[maxLength];
+    if(MJIT::nativeSignature(ramMethod, typeString)){
+        return 0;
+    }
+    //Generate template and instantiate immediate values
+    invokeStaticSize += generateArgumentMoveForStaticMethod(buffer, resolved, typeString, maxLength);
+    
+    if(!invokeStaticSize){
+        return 0;
+    } else if(-1 == invokeStaticSize) {
+        invokeStaticSize = 0;
+    }
+    buffer += invokeStaticSize;
+    //Save Caller preserved registers
+    COPY_TEMPLATE(buffer, saveR10Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x8);
+    COPY_TEMPLATE(buffer, saveR11Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x10);
+    COPY_TEMPLATE(buffer, saveR12Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x18);
+    COPY_TEMPLATE(buffer, saveR13Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x20);
+    COPY_TEMPLATE(buffer, saveR14Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x28);
+    COPY_TEMPLATE(buffer, saveR15Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x30);
+    COPY_TEMPLATE(buffer, invokeStaticTemplate, invokeStaticSize);
+    patchImm8(buffer, (U_64)ramMethod);
+
+    //TODO: Find the maximum size that will need to be saved
+    //      for calling a method and reserve it in the prologue.
+    //      This could be done during the meta-data gathering phase.
+    U_16 paramCount = MJIT::getParamCount(typeString, maxLength);
+    COPY_TEMPLATE(buffer, subRSPImm4, invokeStaticSize);
+    //      This won't work for 2 slot args
+    patchImm4(buffer, (U_32)paramCount*8);
+
+    //Call the glue code
+    COPY_TEMPLATE(buffer, call4ByteRel, invokeStaticSize);
+    PATCH_RELATIVE_ADDR(buffer, (intptr_t)interpreterStaticAndSpecialGlue);
+
+    //TODO: Find the maximum size that will need to be saved
+    //      for calling a method and reserve it in the prologue.
+    //      This could be done during the meta-data gathering phase.
+    COPY_TEMPLATE(buffer, addRSPImm4, invokeStaticSize);
+    //      This won't work for 2 slot args
+    patchImm4(buffer, (U_32)paramCount*8);
+
+    //Load Caller preserved registers
+    COPY_TEMPLATE(buffer, loadR10Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x8);
+    COPY_TEMPLATE(buffer, loadR11Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x10);
+    COPY_TEMPLATE(buffer, loadR12Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x18);
+    COPY_TEMPLATE(buffer, loadR13Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x20);
+    COPY_TEMPLATE(buffer, loadR14Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x28);
+    COPY_TEMPLATE(buffer, loadR15Offset, invokeStaticSize);
+    patchImm4(buffer, (U_32)0x30);
+    switch(typeString[0]){
+        case MJIT::VOID_TYPE_CHARACTER:
+            break;
+        case MJIT::BOOLEAN_TYPE_CHARACTER:
+        case MJIT::BYTE_TYPE_CHARACTER:
+        case MJIT::CHAR_TYPE_CHARACTER:
+        case MJIT::SHORT_TYPE_CHARACTER:
+        case MJIT::INT_TYPE_CHARACTER:
+            COPY_TEMPLATE(buffer, loadIntReturn, invokeStaticSize);
+            break;
+        case MJIT::CLASSNAME_TYPE_CHARACTER:
+        case MJIT::LONG_TYPE_CHARACTER:
+            COPY_TEMPLATE(buffer, loadLongReturn, invokeStaticSize);
+            break;
+        case MJIT::FLOAT_TYPE_CHARACTER:
+            COPY_TEMPLATE(buffer, loadFloatReturn, invokeStaticSize);
+            break;
+        case MJIT::DOUBLE_TYPE_CHARACTER:
+            COPY_TEMPLATE(buffer, loadDoubleReturn, invokeStaticSize);
+            break;
+        default:
+            MJIT_ASSERT(_logFileFP, false, "Bad return type.");
+    }
+    return invokeStaticSize;
+}
+
+buffer_size_t
+MJIT::CodeGenerator::generateGetStatic(char* buffer, TR_ResolvedMethod* method, MJIT::ByteCodeIterator* bci)
 {
     buffer_size_t getStaticSize = 0;
     int32_t cpIndex = (int32_t)bci->next2Bytes();
@@ -1769,15 +1977,15 @@ MJIT::CodeGenerator::generatePutStatic(char *buffer, TR_ResolvedMethod *method, 
 buffer_size_t
 MJIT::CodeGenerator::generateColdArea(char *buffer, J9Method *method, char *jitStackOverflowJumpPatchLocation){
     buffer_size_t coldAreaSize = 0;
-    PATCH_RELATIVE_ADDR(jitStackOverflowJumpPatchLocation, jbe4ByteRel, (intptr_t)buffer);
+    PATCH_RELATIVE_ADDR(jitStackOverflowJumpPatchLocation, (intptr_t)buffer);
     COPY_TEMPLATE(buffer, movEDIImm32, coldAreaSize);
     patchImm4(buffer, _stackPeakSize);
 
     COPY_TEMPLATE(buffer, call4ByteRel, coldAreaSize);
-    PATCH_RELATIVE_ADDR(buffer, call4ByteRel, (intptr_t)jitStackOverflow);
+    PATCH_RELATIVE_ADDR(buffer, (intptr_t)jitStackOverflow);
 
     COPY_TEMPLATE(buffer, jump4ByteRel, coldAreaSize);
-    PATCH_RELATIVE_ADDR(buffer, jump4ByteRel, jitStackOverflowJumpPatchLocation);
+    PATCH_RELATIVE_ADDR(buffer, jitStackOverflowJumpPatchLocation);
 
     return coldAreaSize;
 }
