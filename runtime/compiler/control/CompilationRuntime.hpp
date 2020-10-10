@@ -670,12 +670,15 @@ public:
 #if defined(J9VM_OPT_MICROJIT)
    static void setInitialMJITCountUnsynchronized(J9Method *method, int32_t mjitThreshold, int32_t trThreshold)
       {
-      intptr_t value = 0;
-      if (mjitThreshold < trThreshold)
+      if(TR::Options::getJITCmdLineOptions()->_mjitEnabled)
          {
-         value = (intptr_t)(((trThreshold - mjitThreshold) << 1) | 1);
+         intptr_t value = 0;
+         if (mjitThreshold < trThreshold)
+            {
+            value = (intptr_t)(((trThreshold - mjitThreshold) << 1) | 1);
+            }
+         method->extra = reinterpret_cast<void *>(value);
          }
-      method->extra = reinterpret_cast<void *>(value);
       }
 #endif
 
