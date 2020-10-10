@@ -501,13 +501,7 @@ retry:
 	{
 		VM_BytecodeAction rc = RUN_METHOD_INTERPRETED;
 		J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(_sendMethod);
-#if defined(J9VM_OPT_MICROJIT)
-		void* mjitExtra = _sendMethod->extra2;
-		bool useMJITExtra = (mjitExtra && J9_ARE_NO_BITS_SET((UDATA)mjitExtra, J9_STARTPC_NOT_TRANSLATED));
-		void* const jitStartAddress = useMJITExtra ? mjitExtra : _sendMethod->extra;
-#else
 		void* const jitStartAddress = _sendMethod->extra;
-#endif
 			
 		if (startAddressIsCompiled((UDATA)jitStartAddress)) {
 			/* If we are single stepping, or about to run a breakpointed method, fall back to the interpreter.
@@ -1860,7 +1854,7 @@ done:
 	VMINLINE bool methodIsCompiled(J9Method *method) { return startAddressIsCompiled((UDATA)method->extra); }
 	VMINLINE bool methodIsCompiledTRJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra); }
 #if defined(J9VM_OPT_MICROJIT)
-	VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra2); }
+	VMINLINE bool methodIsCompiledMJIT(J9Method *method) { return _vm->jitConfig && startAddressIsCompiled((UDATA)method->extra); }
 #endif
 	VMINLINE bool singleStepEnabled() { return 0 != _vm->jitConfig->singleStepCount; }
 	VMINLINE bool methodIsBreakpointed(J9Method *method) { return J9_ARE_ANY_BITS_SET((UDATA)method->constantPool, J9_STARTPC_METHOD_BREAKPOINTED); }
@@ -1878,7 +1872,7 @@ done:
 		UDATA result = 0;
 		do {
 #if defined(J9VM_OPT_MICROJIT)
-			mjitExtra = (UDATA)_sendMethod->extra2;
+			mjitExtra = (UDATA)_sendMethod->extra;
 #endif
 			preCount = (UDATA)_sendMethod->extra;
 			postCount = preCount - _currentThread->jitCountDelta;
@@ -1927,7 +1921,7 @@ done:
 					VMStructHasBeenUpdated(REGISTER_ARGS);
 					restoreSpecialStackFrameLeavingArgs(REGISTER_ARGS, bp);
 					/* If the method is now compiled, run it compiled, otherwise run it bytecoded */
-					if (methodIsCompiledTRJIT(_sendMethod) || methodIsCompiledMJIT(_sendMethod)) {
+					if (methodIsCompiled(_sendMethod)) {
 						runMethodCompiled = true;
 					}
 					break;

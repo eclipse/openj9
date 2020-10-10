@@ -28,9 +28,10 @@
 #include "microjit/x/amd64/AMD64Linkage.hpp"
 #include "microjit/x/amd64/AMD64CodegenGC.hpp"
 #include "oti/j9generated.h"
-#include "control/RecompilationInfo.hpp"
 #include "ilgen/J9ByteCodeIterator.hpp"
 #include "env/IO.hpp"
+
+namespace TR { class Compilation; }
 
 typedef unsigned int buffer_size_t;
 namespace MJIT {
@@ -193,6 +194,21 @@ class CodeGenerator {
             TR::DataType dt
         );
 
+        /**
+         * Generates a gaurded counter for recompilation through JITed counting.
+         * 
+         * @param buffer        code buffer
+         * @param initialCount  invocations before compiling with TR
+         * @return              size of generate code; 0 if method failed
+         */
+        buffer_size_t
+        generateGCR(
+            char *buffer,
+            int32_t initialCount,
+            J9Method* method,
+            uintptr_t startPC
+        );
+
         LocalTable makeLocalTable(TR_J9ByteCodeIterator*, MJIT::LocalTableEntry*, U_16, int32_t);
 
     public:
@@ -260,7 +276,7 @@ class CodeGenerator {
             char* first2BytesPatchLocation,
             char* samplingRecompileCallLocation,
             char** firstInstLocation,
-            MJIT::ByteCodeIterator* bci
+            TR_J9ByteCodeIterator* bci
         );
 
         /**
@@ -332,18 +348,6 @@ class CodeGenerator {
         {
             return _linkage._properties.getPointerSize();
         }
-
-        /**
-         * Used to patch the address after a recompilation.
-         */
-        static buffer_size_t
-        trampolinePatch(void* oldJitStartAddress);
-
-        /**
-         * Generates a gaurded counter for recompilation through JITed counting.
-         */
-        buffer_size_t
-        generateGCR(void* oldJitStartAddress, TR::FilePointer* logFileFP, void* newJitStartAddress);
 };
 
 class MJITCompilationFailure: public virtual std::exception {

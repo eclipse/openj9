@@ -432,3 +432,48 @@ template_end paintRegister
 template_start paintLocal
     mov [r14+0xefbeadde], rax
 template_end paintLocal
+
+template_start moveCountAndRecompile
+    mov eax, [qword 0xefbeaddeefbeadde]
+template_end moveCountAndRecompile
+
+template_start checkCountAndRecompile
+    test eax,eax
+    je 0xefbeadde
+template_end checkCountAndRecompile
+
+template_start loadCounter
+    mov eax, [qword 0xefbeaddeefbeadde] 
+template_end loadCounter
+
+template_start decrementCounter
+    sub eax, 1
+    mov [qword 0xefbeaddeefbeadde], eax
+template_end decrementCounter
+
+template_start jgCount
+    test eax, eax
+    jg 0xefbeadde
+template_end jgCount
+
+template_start callRetranslateArg1
+    mov rax, qword 0x0df0adde0df0adde
+template_end callRetranslateArg1
+
+template_start callRetranslateArg2
+    mov rsi, qword 0x0df0adde0df0adde
+template_end callRetranslateArg2
+
+template_start callRetranslate
+    mov edi, 0x00080000
+    call 0xefbeadde
+template_end callRetranslate
+
+template_start setCounter
+    mov rax, 0x2710
+    mov [qword 0xefbeaddeefbeadde], eax
+template_end setCounter
+
+template_start jmpToBody
+    jmp 0xefbeadde
+template_end jmpToBody

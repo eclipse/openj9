@@ -4706,7 +4706,7 @@ TR::CompilationInfo::addMethodToBeCompiled(TR::IlGeneratorMethodDetails & detail
       cur->_jitStateWhenQueued = getPersistentInfo()->getJitState();
 
       bool isJNINativeMethodRequest = false;
-      // TODO: MJIT GCR
+      
       if (pc)
          {
          J9::PrivateLinkage::LinkageInfo *linkageInfo = J9::PrivateLinkage::LinkageInfo::get(pc);
@@ -8750,8 +8750,8 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
       TR_ASSERT(compiler->getMethodHotness() != unknownHotness, "Trying to compile at unknown hotness level");
 
 #if defined(J9VM_OPT_MICROJIT)
-      UDATA mjitExtra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra2;
-      if (mjitExtra && !J9_ARE_NO_BITS_SET(mjitExtra, J9_STARTPC_NOT_TRANSLATED)) 
+      UDATA extra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra;
+      if (extra && !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED)) 
          {
          metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
       }
@@ -8954,14 +8954,14 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
 
 #if defined(J9VM_OPT_MICROJIT)
 // MicroJIT returns a code size of 0 when it encournters a compilation error
-// We must use this to set the correct values an return NULL, this is the same
+// We must use this to set the correct values and return NULL, this is the same
 // no matter which phase of compilation fails, so we create a macro here to
 // perform that work.
 #define MJIT_COMPILE_ERROR(code_size, method) do{\
-   if (0 == code_size) {\
-      method->extra2 = (void *) 0;\
+   if (0 == code_size)\
+      {/* TODO: Need to notify runtime to use TR for next attempt to compile. */\
       compiler->failCompilation<MJIT::MJITCompilationFailure>("Cannot compile.");\
-   }\
+      }\
 } while(0)
 
 // This routine should only be called from wrappedCompile
@@ -9029,24 +9029,25 @@ TR::CompilationInfoPerThreadBase::mjit(
          MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
 
 #define MAX_BUFFER_SIZE 1024
-         // zeroed buffer for generated code
+
          MJIT::CodeGenGC mjitCGGC(logFileFP);
-         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC, this->getCompilation()->getPersistentInfo());
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC, comp()->getPersistentInfo());
          char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
          codeCache = mjit_cg.getCodeCache();
+         
 
          // provide enough space for CodeCacheMethodHeader
-         char *cursor = &buffer[sizeof(OMR::CodeCacheMethodHeader)];
+         char *cursor = buffer;
 
          buffer_size_t buffer_size = 0;
                
-         char *magicWordLocation, *first2BytesPatchLocation;
+         char *magicWordLocation, *first2BytesPatchLocation, *samplingRecompileCallLocation;
          buffer_size_t code_size = mjit_cg.generatePrePrologue(
             cursor,
             method,
             &magicWordLocation,
             &first2BytesPatchLocation,
-            &bodyInfo);
+            &samplingRecompileCallLocation);
          MJIT_COMPILE_ERROR(code_size, method);
             
          compiler->cg()->setPrePrologueSize(code_size);
@@ -9061,7 +9062,7 @@ TR::CompilationInfoPerThreadBase::mjit(
 
          cursor += code_size;
 
-         // (extra2) start point should point to prolog
+         //start point should point to prolog
          char * prologue_address = cursor;
 
          // generate debug breakpoint
@@ -9077,7 +9078,6 @@ TR::CompilationInfoPerThreadBase::mjit(
          //MicroJIT only supports x86-64 at this moment
          mjit_cg.setPeakStackSize(romMethod->maxStack * mjit_cg.getPointerSize());
          char* firstInstructionLocation = NULL;
-         char* samplingRecompileCallLocation = NULL;
 
          code_size = mjit_cg.generatePrologue(
             cursor,
@@ -9085,15 +9085,17 @@ TR::CompilationInfoPerThreadBase::mjit(
             &jitStackOverflowPatchLocation,
             magicWordLocation,
             first2BytesPatchLocation,
+            samplingRecompileCallLocation,
             &firstInstructionLocation,
-            &samplingRecompileCallLocation,
             &bcIterator);
          MJIT_COMPILE_ERROR(code_size, method);
 
          TR::GCStackAtlas *atlas = mjit_cg.getStackAtlas();
          compiler->cg()->setStackAtlas(atlas); 
          compiler->cg()->setMethodStackMap(atlas->getLocalMap());
-         compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(firstInstructionLocation-cursor));
+         //TODO: Find out why setting this correctly causes the startPC to report the jitToJit startPC and not the interpreter entry point
+         //compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(firstInstructionLocation-cursor));
+         compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(0));
 
          buffer_size += code_size;
          MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after prologue");
@@ -9117,7 +9119,6 @@ TR::CompilationInfoPerThreadBase::mjit(
             "%s",
             compilee->signature(compiler->trMemory()));
                
-         bool codegen_failed = false;
          code_size = mjit_cg.generateBody(cursor, compilee, &bcIterator);
 
          MJIT_COMPILE_ERROR(code_size, method);
@@ -9165,7 +9166,7 @@ TR::CompilationInfoPerThreadBase::mjit(
          // Put a metaData pointer into the Code Cache Header(s).
          //
          compiler->cg()->setBinaryBufferCursor((uint8_t*)(cursor));
-         compiler->cg()->setBinaryBufferStart((uint8_t*)(&buffer[sizeof(OMR::CodeCacheMethodHeader)]));
+         compiler->cg()->setBinaryBufferStart((uint8_t*)(buffer));
          metaData = createMJITMethodMetaData(vm, compilee, compiler);
          if (!metaData)
             {
@@ -9197,10 +9198,7 @@ TR::CompilationInfoPerThreadBase::mjit(
          TR_ASSERT(!chTableCommit.acquiredVMAccess(), "We should have already acquired VM access at this point.");
          TR_CHTable *chTable = compiler->getCHTable();
 
-
-         // This is not thread safe. Safely update the extra2 pointer
-         method->extra2 = prologue_address;
-         if (method->extra2)
+         if (prologue_address)
             {         
             trfprintf(
                this->getCompilation()->getOutFile(), 

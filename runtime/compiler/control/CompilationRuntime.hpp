@@ -651,10 +651,20 @@ public:
 #if defined(J9VM_OPT_JITSERVER)
       TR_ASSERT_FATAL(!TR::CompilationInfo::getStream(), "not yet implemented for JITServer");
 #endif /* defined(J9VM_OPT_JITSERVER) */
-      value = (value << 1) | 1;
-      if (value < 0)
-          value = INT_MAX;
-      method->extra = reinterpret_cast<void *>(value);
+#if defined(J9VM_OPT_MICROJIT)
+      TR::Options *options = TR::Options::getJITCmdLineOptions();
+      if(options->_mjitEnabled)
+         {
+            method->TRCount = value;
+         }
+         else
+#endif
+         {
+         value = (value << 1) | 1;
+         if (value < 0)
+            value = INT_MAX;
+         method->extra = reinterpret_cast<void *>(value);
+         }
       }
 
 #if defined(J9VM_OPT_MICROJIT)
@@ -665,7 +675,7 @@ public:
          {
          value = (intptr_t)(((trThreshold - mjitThreshold) << 1) | 1);
          }
-      method->extra2 = reinterpret_cast<void *>(value);
+      method->extra = reinterpret_cast<void *>(value);
       }
 #endif
 

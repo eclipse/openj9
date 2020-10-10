@@ -3558,7 +3558,9 @@ typedef struct J9Method {
 	struct J9ConstantPool* constantPool;
 	void* methodRunAddress;
 	void* volatile extra;
-	void* extra2; //Used for MJIT code location and count
+#if defined(J9VM_OPT_MICROJIT)
+	int32_t TRCount;
+#endif
 } J9Method;
 
 typedef struct J9JNIMethodID {
