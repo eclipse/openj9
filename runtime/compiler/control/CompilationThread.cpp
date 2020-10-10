@@ -8751,10 +8751,10 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
 
 #if defined(J9VM_OPT_MICROJIT)
       UDATA extra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra;
-      if (extra && !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED)) 
+      if (J9::Options::_mjitEnabled && extra && !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED)) 
          {
          metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
-      }
+         }
       else 
 #endif
          {
