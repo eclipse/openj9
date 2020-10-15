@@ -668,11 +668,14 @@ MJIT::CodeGenerator::generateGCR(
     //
     buffer_size_t size = 0;
 
-    //guard block
+    //MicroJIT either needs its own gaurd, or it needs to not have a guard block
+    // The following is kept here so that if a new gaurd it 
+    /*
     COPY_TEMPLATE(buffer, moveCountAndRecompile, size);
     char *guardBlock = buffer;
     COPY_TEMPLATE(buffer, checkCountAndRecompile, size);
     char *guardBlockJump = buffer;
+    */
 
     //bumpCounterBlock
     COPY_TEMPLATE(buffer, loadCounter, size);

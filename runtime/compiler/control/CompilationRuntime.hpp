@@ -653,7 +653,7 @@ public:
 #endif /* defined(J9VM_OPT_JITSERVER) */
 #if defined(J9VM_OPT_MICROJIT)
       TR::Options *options = TR::Options::getJITCmdLineOptions();
-      if(options->_mjitEnabled)
+      if(options->_mjitEnabled && value)
          {
             method->TRCount = value;
          }
@@ -672,11 +672,7 @@ public:
       {
       if(TR::Options::getJITCmdLineOptions()->_mjitEnabled)
          {
-         intptr_t value = 0;
-         if (mjitThreshold < trThreshold)
-            {
-            value = (intptr_t)(((trThreshold - mjitThreshold) << 1) | 1);
-            }
+         intptr_t value = (intptr_t)((mjitThreshold << 1) | 1);
          method->extra = reinterpret_cast<void *>(value);
          }
       }

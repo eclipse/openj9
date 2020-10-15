@@ -613,10 +613,12 @@ static void jitHookInitializeSendTarget(J9HookInterface * * hook, UDATA eventNum
       }
 
 #if defined(J9VM_OPT_MICROJIT)
-   if(optionsJIT->_mjitEnabled) {
+   if(optionsJIT->_mjitEnabled)
+      {
       int32_t mjitCount = optionsJIT->_mjitInitialCount;
-      TR::CompilationInfo::setInitialMJITCountUnsynchronized(method,mjitCount,count);
-   }
+      if(count)
+         TR::CompilationInfo::setInitialMJITCountUnsynchronized(method,mjitCount,count);
+      }
 #endif
 
    TR::CompilationInfo::setInitialInvocationCountUnsynchronized(method,count);
