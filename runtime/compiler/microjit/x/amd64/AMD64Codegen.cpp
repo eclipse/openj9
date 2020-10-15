@@ -706,12 +706,12 @@ MJIT::CodeGenerator::generateGCR(
     // Find the countForRecompile's address and patch for the guard block.
     patchImm8(retranslateArg1Patch, (uintptr_t)(method));
     patchImm8(retranslateArg2Patch, (uintptr_t)(startPC));
-    patchImm8(guardBlock, (uintptr_t)(&(_persistentInfo->_countForRecompile)));
+    //patchImm8(guardBlock, (uintptr_t)(&(_persistentInfo->_countForRecompile)));
     PATCH_RELATIVE_ADDR_32_BIT(callSite, jitRetranslateCallerWithPrepHelperAddress);
     patchImm8(counterLoader, (uintptr_t)counterLocation);
     patchImm8(counterStore, (uintptr_t)counterLocation);
     patchImm8(counterSetter, (uintptr_t)counterLocation);
-    PATCH_RELATIVE_ADDR_32_BIT(guardBlockJump, buffer);
+    //PATCH_RELATIVE_ADDR_32_BIT(guardBlockJump, buffer);
     PATCH_RELATIVE_ADDR_32_BIT(bumpCounterBlockJump, buffer);
     PATCH_RELATIVE_ADDR_32_BIT(callRecompileBlockJump, buffer);
 
