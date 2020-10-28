@@ -163,6 +163,14 @@ extern TR::OptionSet *findOptionSet(J9Method *, bool);
 #define DECOMPRESSION_FAILED -1
 #define DECOMPRESSION_SUCCEEDED 0
 
+#if defined(J9VM_OPT_MICROJIT)
+#define COMPILE_WITH_MICROJIT(extra, method, extendedFlags)\
+   (TR::Options::getJITCmdLineOptions()->_mjitEnabled && \
+   extra && \
+   !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED) &&\
+   (*extendedFlags) & J9_MJIT_FAILED_COMPILE)
+#endif
+
 #if defined(WINDOWS)
 void setThreadAffinity(unsigned _int64 handle, unsigned long mask)
    {
@@ -8748,17 +8756,21 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
       Trc_JIT_compileStart(vmThread, hotnessString, compiler->signature());
 
       TR_ASSERT(compiler->getMethodHotness() != unknownHotness, "Trying to compile at unknown hotness level");
-
+      {
 #if defined(J9VM_OPT_MICROJIT)
-      UDATA extra = (UDATA)that->_methodBeingCompiled->getMethodDetails().getMethod()->extra;
-      if (TR::Options::getJITCmdLineOptions()->_mjitEnabled && extra && !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED)) 
-         {
-         metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
-         }
-      else 
+         J9Method *method = that->_methodBeingCompiled->getMethodDetails().getMethod();
+         UDATA extra = (UDATA)method->extra;
+         TR_J9VMBase *fe = TR_J9VMBase::get(jitConfig, vmThread);
+         U_8 *extendedFlags = fe->fetchMethodExtendedFlagsPointer(method);
+         if (COMPILE_WITH_MICROJIT(extra, method, extendedFlags)) 
+            {
+            metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
+            }
+         else 
 #endif
-         {
-         metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
+            {
+            metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
+            }
          }
       }
 
@@ -8961,6 +8973,12 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
    if (0 == code_size)\
       {/* TODO: Need to notify runtime to use TR for next attempt to compile. */\
       compiler->failCompilation<MJIT::MJITCompilationFailure>("Cannot compile.");\
+      intptr_t trCountFromMJIT = J9ROMMETHOD_HAS_BACKWARDS_BRANCHES(romMethod) ? TR_DEFAULT_INITIAL_BCOUNT : TR_DEFAULT_INITIAL_COUNT;\
+      trCountFromMJIT = (trCountFromMJIT << 1) | 1;\
+      method->extra = reinterpret_cast<void *>(trCountFromMJIT);\
+      TR_J9VMBase *fe = TR_J9VMBase::get(jitConfig, vmThread);\
+      U_8 *extendedFlags = fe->fetchMethodExtendedFlagsPointer(method);\
+      *extendedFlags = (*extendedFlags) | J9_MJIT_FAILED_COMPILE;\
       }\
 } while(0)
 

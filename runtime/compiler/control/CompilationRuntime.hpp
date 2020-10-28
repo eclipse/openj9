@@ -655,7 +655,7 @@ public:
       TR::Options *options = TR::Options::getJITCmdLineOptions();
       if(options->_mjitEnabled && value)
          {
-            method->TRCount = value;
+            return;
          }
          else
 #endif

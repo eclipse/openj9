@@ -1446,8 +1446,8 @@ MJIT::CodeGenerator::generatePrologue(
             patchImm4(buffer, entry.localArrayIndex * pointerSize);
         }
     }
-
-    prologueSize += generateGCR(buffer, method->TRCount, method, startPC);
+    uint32_t count = J9ROMMETHOD_HAS_BACKWARDS_BRANCHES(romMethod) ? TR_DEFAULT_INITIAL_BCOUNT : TR_DEFAULT_INITIAL_COUNT;
+    prologueSize += generateGCR(buffer, count, method, startPC);
     
     return prologueSize;
 }

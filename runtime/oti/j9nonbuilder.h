@@ -3558,9 +3558,6 @@ typedef struct J9Method {
 	struct J9ConstantPool* constantPool;
 	void* methodRunAddress;
 	void* volatile extra;
-#if defined(J9VM_OPT_MICROJIT)
-	int32_t TRCount;
-#endif
 } J9Method;
 
 typedef struct J9JNIMethodID {
