@@ -27,6 +27,7 @@
 typedef struct J9GetStackTraceUserData {
 	J9Class * elementClass;
 	UDATA index;
+	UDATA hiddenFrames;
 	UDATA maxFrames;
 	J9UTF8 *previousFileName;
 } J9GetStackTraceUserData;

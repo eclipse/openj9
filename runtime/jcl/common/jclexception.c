@@ -23,6 +23,7 @@
 #include "j2sever.h"
 #include "j9.h"
 #include "j9cp.h"
+#include "j9protos.h"
 #include "jclexception.h"
 #include "jvminit.h"
 #include "objhelp.h"
@@ -100,6 +101,15 @@ getStackTraceIterator(J9VMThread * vmThread, void * voidUserData, UDATA bytecode
 		return FALSE;
 	}
 
+	/* Check for extended modifiers on the ROM method */
+	if ((NULL != romMethod) && J9ROMMETHOD_HAS_EXTENDED_MODIFIERS(romMethod)) {
+		UDATA extraModifiers = getExtendedModifiersDataFromROMMethod(romMethod);
+		/* Skip the frame if @Hidden annotation is detected and -XX:+ShowHiddenFrames option has not been set */
+		if (J9_ARE_NO_BITS_SET(vm->runtimeFlags, J9_RUNTIME_SHOW_HIDDEN_FRAMES) && J9ROMMETHOD_HAS_LAMBDAFROM_HIDDEN_ANNOTATION(extraModifiers)) {
+			userData->hiddenFrames += 1;
+			return TRUE;
+		}
+	}
 	/* Prevent the current class from being unloaded during allocation */
 	PUSH_OBJECT_IN_SPECIAL_FRAME(vmThread, (NULL == classLoader) ? NULL : classLoader->classLoaderObject);
 
@@ -354,6 +364,7 @@ retry:
 
 	userData.elementClass = elementClass;
 	userData.index = 0;
+	userData.hiddenFrames = 0;
 	userData.maxFrames = numberOfFrames;
 	userData.previousFileName = NULL;
 	PUSH_OBJECT_IN_SPECIAL_FRAME(vmThread, (j9object_t) result);
@@ -363,7 +374,7 @@ retry:
 	/* If the stack trace sizes are inconsistent between pass 1 and 2, start again */
 
 	if (vmThread->currentException == NULL) {
-		if (userData.index != numberOfFrames) {
+		if ((userData.index + userData.hiddenFrames) != numberOfFrames) {
 			goto retry;
 		}
 	}

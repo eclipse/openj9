@@ -1899,9 +1899,9 @@ IDATA VMInitStages(J9JavaVM *vm, IDATA stage, void* reserved) {
 			}
 #endif
 
-			if (FIND_AND_CONSUME_ARG(EXACT_MATCH, VMOPT_XDFPBD, NULL) >= 0) {
-				vm->runtimeFlags |= J9_RUNTIME_DFPBD;
-			}
+			/* The -Xdfpbd option is used by JIT, consuming it here to allow VM to continue */
+			FIND_AND_CONSUME_ARG(EXACT_MATCH, VMOPT_XDFPBD, NULL);
+
 			if (FIND_AND_CONSUME_ARG(EXACT_MATCH, VMOPT_XAGGRESSIVE, NULL) >= 0) {
 				vm->runtimeFlags |= J9_RUNTIME_AGGRESSIVE;
 			}
@@ -3578,6 +3578,14 @@ processVMArgsFromFirstToLast(J9JavaVM * vm)
 		}
 	}
 #endif /* defined(OMR_GC_COMPRESSED_POINTERS) && defined(OMR_GC_FULL_POINTERS) */
+
+	{
+		IDATA showHiddenFrames = FIND_AND_CONSUME_ARG(EXACT_MATCH, VMOPT_XXSHOWHIDDENFRAMES, NULL);
+		IDATA noshowHiddenFrames = FIND_AND_CONSUME_ARG(EXACT_MATCH, VMOPT_XXNOSHOWHIDDENFRAMES, NULL);
+		if (showHiddenFrames > noshowHiddenFrames) {
+			vm->runtimeFlags |= J9_RUNTIME_SHOW_HIDDEN_FRAMES;
+		}
+	}
 
 	return JNI_OK;
 }
