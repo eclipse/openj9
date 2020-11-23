@@ -1191,7 +1191,7 @@ ZZ  MVHHI   0(,r1),HEX(07E0)
     CONST_4BYTE(E5441000)
     CONST_4BYTE(07E01800)
 
-    LABEL(L_VolatileCheckDone)
+LABEL(L_VolatileCheckDone)
     RestoreRegs
 
 ZZ Now we jump back to mainline code.
@@ -1366,7 +1366,7 @@ ZZ  MVHHI   0(,r1),HEX(07E0)
     CONST_4BYTE(E5441000)
     CONST_4BYTE(07E01800)
 
-    LABEL(L_VolatileOOLInstanceCheckDone)
+LABEL(L_VolatileOOLInstanceCheckDone)
     RestoreRegs
     LA    r14,eq_outOfLineStart_inDataSnippet(,r14)
     BR    r14
