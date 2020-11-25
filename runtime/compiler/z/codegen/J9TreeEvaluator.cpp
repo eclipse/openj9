@@ -4167,7 +4167,7 @@ xstoreVolatileHelper(TR::Node* node, TR::CodeGenerator* cg)
                   // will take care of patching the NOP into a fence if it determines the field is volatile following resolution.
                   TR::Instruction* fenceNOP = new (cg->trHeapMemory()) TR::S390NOPInstruction(TR::InstOpCode::NOP, 2, node, cg);
 
-                  uds->fenceNOPInst = fenceNOP;
+                  uds->setFenceNOPInstruction(fenceNOP);
 
                   return;
                   }

@@ -70,7 +70,7 @@ J9::Z::UnresolvedDataSnippet::UnresolvedDataSnippet(
    J9::UnresolvedDataSnippet(cg, node, symRef, isStore, canCauseGC),
       _branchInstruction(NULL),
       _dataReferenceInstruction(NULL),
-      fenceNOPInst(NULL),
+      _fenceNOPInst(NULL),
       _dataSymbolReference(symRef),
       _unresolvedData(NULL),
       _memoryReference(NULL),
@@ -182,7 +182,7 @@ J9::Z::UnresolvedDataSnippet::emitSnippetBody()
          {
          glueRef = cg()->symRefTab()->findOrCreateRuntimeHelper(TR_S390interpreterUnresolvedInstanceDataStoreGlue);
 
-         TR_ASSERT_FATAL_WITH_INSTRUCTION(getDataReferenceInstruction(), fenceNOPInst != NULL, "Unresolved store must have a fence NOP instruction");
+         TR_ASSERT_FATAL_WITH_INSTRUCTION(getDataReferenceInstruction(), _fenceNOPInst != NULL, "Unresolved store must have a fence NOP instruction");
          }
       else
          {
@@ -230,7 +230,7 @@ J9::Z::UnresolvedDataSnippet::emitSnippetBody()
          {
          glueRef = cg()->symRefTab()->findOrCreateRuntimeHelper(TR_S390interpreterUnresolvedStaticDataStoreGlue);
 
-         TR_ASSERT_FATAL_WITH_INSTRUCTION(getDataReferenceInstruction(), fenceNOPInst != NULL, "Unresolved store must have a fence NOP instruction");
+         TR_ASSERT_FATAL_WITH_INSTRUCTION(getDataReferenceInstruction(), _fenceNOPInst != NULL, "Unresolved store must have a fence NOP instruction");
          }
       else
          {
@@ -318,9 +318,9 @@ J9::Z::UnresolvedDataSnippet::emitSnippetBody()
    cursor += sizeof(uintptr_t);
 
    // Fence NOP emitted for volatile field stores that may need patching for volatile fields
-   if (fenceNOPInst != NULL)
+   if (getFenceNOPInstruction() != NULL)
       {
-      *(uintptr_t *) cursor = (uintptr_t) (fenceNOPInst->getBinaryEncoding());
+      *(uintptr_t *) cursor = (uintptr_t) (getFenceNOPInstruction()->getBinaryEncoding());
       AOTcgDiag1(comp, "add TR_AbsoluteMethodAddress cursor=%x\n", cursor);
       cg()->addProjectSpecializedRelocation(cursor, NULL, NULL, TR_AbsoluteMethodAddress,
                              __FILE__, __LINE__, getNode());
@@ -572,9 +572,9 @@ TR_Debug::print(TR::FILE *pOutFile, TR::UnresolvedDataSnippet * snippet)
    bufferPos += sizeof(intptr_t);
 
    printPrefix(pOutFile, NULL, bufferPos, sizeof(intptr_t));
-   if (snippet->fenceNOPInst != NULL)
+   if (snippet->getFenceNOPInstruction() != NULL)
       {
-      addr = (uintptr_t) (snippet->fenceNOPInst->getBinaryEncoding());
+      addr = (uintptr_t) (snippet->getFenceNOPInstruction()->getBinaryEncoding());
       }
    else
       {
