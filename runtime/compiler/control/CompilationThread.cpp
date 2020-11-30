@@ -168,7 +168,7 @@ extern TR::OptionSet *findOptionSet(J9Method *, bool);
    (TR::Options::getJITCmdLineOptions()->_mjitEnabled && \
    extra && \
    !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED) &&\
-   (*extendedFlags) & J9_MJIT_FAILED_COMPILE)
+   !((*extendedFlags) & J9_MJIT_FAILED_COMPILE))
 #endif
 
 #if defined(WINDOWS)
