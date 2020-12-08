@@ -97,6 +97,13 @@
 #include "env/J9SegmentCache.hpp"
 #include "env/SystemSegmentProvider.hpp"
 #include "env/DebugSegmentProvider.hpp"
+#include "ilgen/J9ByteCodeIterator.hpp"
+#include "ilgen/J9ByteCodeIteratorWithState.hpp"
+#if defined(J9VM_OPT_MICROJIT)
+#include "microjit/x/amd64/AMD64Codegen.hpp"
+#include "microjit/x/amd64/AMD64CodegenGC.hpp"
+#include "microjit/utils.hpp"
+#endif /* J9VM_OPT_MICROJIT */
 #if defined(J9VM_OPT_JITSERVER)
 #include "control/JITClientCompilationThread.hpp"
 #include "control/JITServerCompilationThread.hpp"
@@ -156,6 +163,14 @@ extern TR::OptionSet *findOptionSet(J9Method *, bool);
 #define COMPRESSION_FAILED -1
 #define DECOMPRESSION_FAILED -1
 #define DECOMPRESSION_SUCCEEDED 0
+
+#if defined(J9VM_OPT_MICROJIT)
+#define COMPILE_WITH_MICROJIT(extra, method, extendedFlags)\
+   (TR::Options::getJITCmdLineOptions()->_mjitEnabled && \
+   extra && \
+   !J9_ARE_NO_BITS_SET(extra, J9_STARTPC_NOT_TRANSLATED) &&\
+   !((*extendedFlags) & J9_MJIT_FAILED_COMPILE))
+#endif
 
 #if defined(WINDOWS)
 void setThreadAffinity(unsigned _int64 handle, unsigned long mask)
@@ -2352,6 +2367,11 @@ bool TR::CompilationInfo::shouldRetryCompilation(TR_MethodToBeCompiled *entry, T
                entry->_optimizationPlan->setDisableGCR(); // GCR isn't needed
                tryCompilingAgain = true;
                break;
+#if defined(J9VM_OPT_MICROJIT)
+            case mjitCompilationFailure:
+               tryCompilingAgain = true;
+               break;
+#endif
             case compilationNullSubstituteCodeCache:
             case compilationCodeMemoryExhausted:
             case compilationCodeCacheError:
@@ -4717,6 +4737,7 @@ TR::CompilationInfo::addMethodToBeCompiled(TR::IlGeneratorMethodDetails & detail
       cur->_jitStateWhenQueued = getPersistentInfo()->getJitState();
 
       bool isJNINativeMethodRequest = false;
+      
       if (pc)
          {
          J9::PrivateLinkage::LinkageInfo *linkageInfo = J9::PrivateLinkage::LinkageInfo::get(pc);
@@ -8763,9 +8784,22 @@ TR::CompilationInfoPerThreadBase::wrappedCompile(J9PortLibrary *portLib, void * 
       Trc_JIT_compileStart(vmThread, hotnessString, compiler->signature());
 
       TR_ASSERT(compiler->getMethodHotness() != unknownHotness, "Trying to compile at unknown hotness level");
-
-      metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider);
-
+      {
+#if defined(J9VM_OPT_MICROJIT)
+         J9Method *method = that->_methodBeingCompiled->getMethodDetails().getMethod();
+         UDATA extra = (UDATA)method->extra;
+         TR_J9VMBase *fe = TR_J9VMBase::get(jitConfig, vmThread);
+         U_8 *extendedFlags = fe->fetchMethodExtendedFlagsPointer(method);
+         if (COMPILE_WITH_MICROJIT(extra, method, extendedFlags)) 
+            {
+            metaData = that->mjit(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
+            }
+         else 
+#endif
+            {
+            metaData = that->compile(vmThread, compiler, compilee, *vm, p->_optimizationPlan, scratchSegmentProvider); 
+            }
+         }
       }
 
    // Store hints in the SCC
@@ -8958,6 +8992,312 @@ TR::CompilationInfoPerThreadBase::performAOTLoad(
    return metaData;
    }
 
+#if defined(J9VM_OPT_MICROJIT)
+// MicroJIT returns a code size of 0 when it encournters a compilation error
+// We must use this to set the correct values and return NULL, this is the same
+// no matter which phase of compilation fails, so we create a macro here to
+// perform that work.
+#define MJIT_COMPILE_ERROR(code_size, method) do{\
+   if (0 == code_size)\
+      {/* TODO: Need to notify runtime to use TR for next attempt to compile. */\
+      compiler->failCompilation<MJIT::MJITCompilationFailure>("Cannot compile.");\
+      intptr_t trCountFromMJIT = J9ROMMETHOD_HAS_BACKWARDS_BRANCHES(romMethod) ? TR_DEFAULT_INITIAL_BCOUNT : TR_DEFAULT_INITIAL_COUNT;\
+      trCountFromMJIT = (trCountFromMJIT << 1) | 1;\
+      method->extra = reinterpret_cast<void *>(trCountFromMJIT);\
+      TR_J9VMBase *fe = TR_J9VMBase::get(jitConfig, vmThread);\
+      U_8 *extendedFlags = fe->fetchMethodExtendedFlagsPointer(method);\
+      *extendedFlags = (*extendedFlags) | J9_MJIT_FAILED_COMPILE;\
+      }\
+} while(0)
+
+// This routine should only be called from wrappedCompile
+TR_MethodMetaData *
+TR::CompilationInfoPerThreadBase::mjit(
+   J9VMThread *vmThread,
+   TR::Compilation *compiler,
+   TR_ResolvedMethod *compilee,
+   TR_J9VMBase &vm,
+   TR_OptimizationPlan *optimizationPlan,
+   TR::SegmentAllocator const &scratchSegmentProvider
+   )
+   {
+
+   PORT_ACCESS_FROM_JITCONFIG(jitConfig);
+
+   TR_MethodMetaData *metaData = NULL;
+   J9Method *method = NULL;
+   TR::CodeCache *codeCache  = NULL;
+
+   if (_methodBeingCompiled->_priority >= CP_SYNC_MIN)
+      ++_compInfo._numSyncCompilations;
+   else
+      ++_compInfo._numAsyncCompilations;
+
+   if (_methodBeingCompiled->isDLTCompile())
+      compiler->setDltBcIndex(static_cast<J9::MethodInProgressDetails &>(_methodBeingCompiled->getMethodDetails()).getByteCodeIndex());
+
+   bool volatile haveLockedClassUnloadMonitor = false; // used for compilation without VM access
+   
+   try 
+      {
+
+      InterruptibleOperation compilingMethodBody(*this);
+
+      TR::IlGeneratorMethodDetails & details = _methodBeingCompiled->getMethodDetails();
+      method = details.getMethod();
+
+      TRIGGER_J9HOOK_JIT_COMPILING_START(_jitConfig->hookInterface, vmThread, method); 
+ 
+      // BEGIN MICROJIT
+      TR::FilePointer *logFileFP = this->getCompilation()->getOutFile();
+      TR_J9ByteCodeIterator bcIterator(0, static_cast<TR_ResolvedJ9Method *> (compilee), static_cast<TR_J9VMBase *> (&vm), comp());
+ 
+      if (TR::Options::canJITCompile())      
+         {
+         TR::Options *options = TR::Options::getJITCmdLineOptions();
+
+         J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
+         U_16 maxLength = J9UTF8_LENGTH(J9ROMMETHOD_SIGNATURE(romMethod));
+         char typeString[maxLength];
+         if (MJIT::nativeSignature(method, typeString))
+            {
+            return 0;
+            }
+
+         U_16 paramCount = MJIT::getParamCount(typeString, maxLength);
+         MJIT::ParamTableEntry paramTableEntries[paramCount];
+
+         int error_code = 0;
+         MJIT::RegisterStack stack = MJIT::mapIncomingParams(typeString, maxLength, &error_code, paramTableEntries, paramCount, logFileFP);
+         if (error_code)
+            MJIT_COMPILE_ERROR(0, method);
+      
+         MJIT::ParamTable paramTable(paramTableEntries, paramCount, &stack);
+
+#define MAX_BUFFER_SIZE 1024
+
+         MJIT::CodeGenGC mjitCGGC(logFileFP);
+         MJIT::CodeGenerator mjit_cg(_jitConfig, vmThread, logFileFP, vm, &paramTable, compiler, &mjitCGGC, comp()->getPersistentInfo());
+         char* buffer = (char*)mjit_cg.allocateCodeCache(MAX_BUFFER_SIZE, &vm, vmThread);
+         codeCache = mjit_cg.getCodeCache();
+         
+
+         // provide enough space for CodeCacheMethodHeader
+         char *cursor = buffer;
+
+         buffer_size_t buffer_size = 0;
+               
+         char *magicWordLocation, *first2BytesPatchLocation, *samplingRecompileCallLocation;
+         buffer_size_t code_size = mjit_cg.generatePrePrologue(
+            cursor,
+            method,
+            &magicWordLocation,
+            &first2BytesPatchLocation,
+            &samplingRecompileCallLocation);
+         MJIT_COMPILE_ERROR(code_size, method);
+            
+         compiler->cg()->setPrePrologueSize(code_size);
+         buffer_size += code_size;
+         MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after pre-prologue");
+
+         trfprintf(this->getCompilation()->getOutFile(), "\ngeneratePrePrologue\n");
+         for(int32_t i = 0; i < code_size; i++)
+            {
+            trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
+            }
+
+         cursor += code_size;
+
+         //start point should point to prolog
+         char * prologue_address = cursor;
+
+         // generate debug breakpoint
+         if (comp()->getOption(TR_EntryBreakPoints))
+            {  
+            code_size = mjit_cg.generateDebugBreakpoint(cursor);
+            cursor += code_size;
+            buffer_size += code_size;
+            }
+
+         char * jitStackOverflowPatchLocation = NULL;
+
+         //MicroJIT only supports x86-64 at this moment
+         mjit_cg.setPeakStackSize(romMethod->maxStack * mjit_cg.getPointerSize());
+         char* firstInstructionLocation = NULL;
+
+         code_size = mjit_cg.generatePrologue(
+            cursor,
+            method,
+            &jitStackOverflowPatchLocation,
+            magicWordLocation,
+            first2BytesPatchLocation,
+            samplingRecompileCallLocation,
+            &firstInstructionLocation,
+            &bcIterator);
+         MJIT_COMPILE_ERROR(code_size, method);
+
+         TR::GCStackAtlas *atlas = mjit_cg.getStackAtlas();
+         compiler->cg()->setStackAtlas(atlas); 
+         compiler->cg()->setMethodStackMap(atlas->getLocalMap());
+         //TODO: Find out why setting this correctly causes the startPC to report the jitToJit startPC and not the interpreter entry point
+         //compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(firstInstructionLocation-cursor));
+         compiler->cg()->setJitMethodEntryPaddingSize((uint32_t)(0));
+
+         buffer_size += code_size;
+         MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after prologue");
+
+         trfprintf(this->getCompilation()->getOutFile(), "\ngeneratePrologue\n");
+         for(int32_t i = 0; i < code_size; i++)
+            {
+            trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
+            }
+         cursor += code_size;
+
+         // GENERATE BODY
+         bcIterator.setIndex(0);
+         TR_Debug dbg(this->getCompilation());
+               
+         this->getCompilation()->setDebug(&dbg);
+               
+         trfprintf(
+            this->getCompilation()->getOutFile(), 
+            "\n"
+            "%s",
+            compilee->signature(compiler->trMemory()));
+               
+         code_size = mjit_cg.generateBody(cursor, compilee, &bcIterator);
+
+         MJIT_COMPILE_ERROR(code_size, method);
+
+         buffer_size += code_size;
+         MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after body");
+
+         trfprintf(this->getCompilation()->getOutFile(), "\ngenerateBody\n");
+         for(int32_t i = 0; i < code_size; i++)
+            {
+            trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
+            }
+
+         cursor += code_size;
+         // END GENERATE BODY
+                     
+         // GENERATE COLD AREA
+         code_size = mjit_cg.generateColdArea(cursor, method, jitStackOverflowPatchLocation);
+
+         MJIT_COMPILE_ERROR(code_size, method);
+         buffer_size += code_size;
+         MJIT_ASSERT(logFileFP, buffer_size < MAX_BUFFER_SIZE, "Buffer overflow after cold-area");
+
+         trfprintf(this->getCompilation()->getOutFile(), "\ngenerateColdArea\n");
+         for(int32_t i = 0; i < code_size; i++)
+            {
+            trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)cursor[i]) & (unsigned char)0xff);
+            }
+
+         trfprintf(this->getCompilation()->getOutFile(), "\nfinal method\n");
+         for(int32_t i = 0; i < buffer_size; i++)
+            {
+            trfprintf(this->getCompilation()->getOutFile(), "%02x\n", ((unsigned char)buffer[i]) & (unsigned char)0xff);
+            }
+         cursor += code_size;
+
+         // As the body is finished, mark its profile info as active so that the JProfiler thread will inspect it
+         
+         //TODO: after adding profiling support, uncomment this.
+         //if (bodyInfo && bodyInfo->getProfileInfo())
+         //   {
+         //   bodyInfo->getProfileInfo()->setActive();
+         //   }
+
+         // Put a metaData pointer into the Code Cache Header(s).
+         //
+         compiler->cg()->setBinaryBufferCursor((uint8_t*)(cursor));
+         compiler->cg()->setBinaryBufferStart((uint8_t*)(buffer));
+         metaData = createMJITMethodMetaData(vm, compilee, compiler);
+         if (!metaData)
+            {
+            if (TR::Options::getVerboseOption(TR_VerboseCompilationDispatch))
+               {
+               TR_VerboseLog::writeLineLocked(
+                  TR_Vlog_DISPATCH,
+                  "Failed to create metadata for %s @ %s",
+                  compiler->signature(),
+                  compiler->getHotnessName());
+               }
+            compiler->failCompilation<J9::MetaDataCreationFailure>("Metadata creation failure");
+            }
+         if (TR::Options::getVerboseOption(TR_VerboseCompilationDispatch))
+            {
+            TR_VerboseLog::writeLineLocked(
+               TR_Vlog_DISPATCH,
+               "Successfully created metadata [" POINTER_PRINTF_FORMAT "] for %s @ %s",
+               metaData,
+               compiler->signature(),
+               compiler->getHotnessName());
+            }
+         setMetadata(metaData);
+         uint8_t *warmMethodHeader = compiler->cg()->getBinaryBufferStart() - sizeof(OMR::CodeCacheMethodHeader);
+         memcpy( warmMethodHeader + offsetof(OMR::CodeCacheMethodHeader, _metaData), &metaData, sizeof(metaData) );
+         // FAR: should we do postpone this copying until after CHTable commit?
+         metaData->runtimeAssumptionList = *(compiler->getMetadataAssumptionList());
+         TR::ClassTableCriticalSection chTableCommit(&vm);
+         TR_ASSERT(!chTableCommit.acquiredVMAccess(), "We should have already acquired VM access at this point.");
+         TR_CHTable *chTable = compiler->getCHTable();
+
+         if (prologue_address)
+            {         
+            trfprintf(
+               this->getCompilation()->getOutFile(), 
+               "\n"
+               "MJIT:%s",
+               compilee->signature(compiler->trMemory()));
+            }
+
+         // END MICROJIT
+
+         }
+
+      TRIGGER_J9HOOK_JIT_COMPILING_END(_jitConfig->hookInterface, vmThread, method);
+      }
+      catch (const std::exception &e)
+         {
+         const char *exceptionName;
+
+#if defined(J9ZOS390)
+         // Compiling with -Wc,lp64 results in a crash on z/OS when trying
+         // to call the what() virtual method of the exception.
+         exceptionName = "std::exception";
+#else
+         exceptionName = e.what();
+#endif
+
+         printCompFailureInfo(compiler, exceptionName);
+         processException(vmThread, scratchSegmentProvider, compiler, haveLockedClassUnloadMonitor, exceptionName);
+         if (codeCache)
+            {
+            TR::CodeCacheManager::instance()->unreserveCodeCache(codeCache);
+            }
+         metaData = 0;
+         }
+
+   // At this point the compilation has either succeeded and compilation cannot be
+   // interrupted anymore, or it has failed. In either case _compilationShouldBeinterrupted flag
+   // is not needed anymore
+   setCompilationShouldBeInterrupted(0);
+
+   // We should not have the classTableMutex at this point
+   TR_ASSERT_FATAL(!TR::MonitorTable::get()->getClassTableMutex()->owned_by_self(),
+                  "Should not still own classTableMutex");
+
+   // Increment the number of JIT compilations (either successful or not)
+   // performed by this compilation thread
+   //
+   incNumJITCompilations();
+
+   return metaData;
+   }
+#endif /* J9VM_OPT_MICROJIT */
+         
 // This routine should only be called from wrappedCompile
 TR_MethodMetaData *
 TR::CompilationInfoPerThreadBase::compile(
@@ -10980,6 +11320,13 @@ TR::CompilationInfoPerThreadBase::processException(
       _methodBeingCompiled->_compErrCode = compilationHeapLimitExceeded;
       }
    /* Allocation Exceptions End */
+#if defined(J9VM_OPT_MICROJIT)
+   catch (const MJIT::MJITCompilationFailure &e)
+      {
+       shouldProcessExceptionCommonTasks = false;
+      _methodBeingCompiled->_compErrCode = mjitCompilationFailure;
+      }
+#endif
 
    /* IL Gen Exceptions Start */
    catch (const J9::AOTHasInvokeHandle &e)

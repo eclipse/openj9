@@ -651,11 +651,32 @@ public:
 #if defined(J9VM_OPT_JITSERVER)
       TR_ASSERT_FATAL(!TR::CompilationInfo::getStream(), "not yet implemented for JITServer");
 #endif /* defined(J9VM_OPT_JITSERVER) */
-      value = (value << 1) | 1;
-      if (value < 0)
-          value = INT_MAX;
-      method->extra = reinterpret_cast<void *>(value);
+#if defined(J9VM_OPT_MICROJIT)
+      TR::Options *options = TR::Options::getJITCmdLineOptions();
+      if(options->_mjitEnabled && value)
+         {
+            return;
+         }
+         else
+#endif
+         {
+         value = (value << 1) | 1;
+         if (value < 0)
+            value = INT_MAX;
+         method->extra = reinterpret_cast<void *>(value);
+         }
       }
+
+#if defined(J9VM_OPT_MICROJIT)
+   static void setInitialMJITCountUnsynchronized(J9Method *method, int32_t mjitThreshold, int32_t trThreshold)
+      {
+      if(TR::Options::getJITCmdLineOptions()->_mjitEnabled)
+         {
+         intptr_t value = (intptr_t)((mjitThreshold << 1) | 1);
+         method->extra = reinterpret_cast<void *>(value);
+         }
+      }
+#endif
 
    static uint32_t getMethodBytecodeSize(const J9ROMMethod * romMethod);
    static uint32_t getMethodBytecodeSize(J9Method* method);

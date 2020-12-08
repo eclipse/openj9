@@ -502,6 +502,7 @@ retry:
 		VM_BytecodeAction rc = RUN_METHOD_INTERPRETED;
 		J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(_sendMethod);
 		void* const jitStartAddress = _sendMethod->extra;
+			
 		if (startAddressIsCompiled((UDATA)jitStartAddress)) {
 			/* If we are single stepping, or about to run a breakpointed method, fall back to the interpreter.
 			 * Check FSD enabled first, to minimize the number of extra instructions in the normal execution path

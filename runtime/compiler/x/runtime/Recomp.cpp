@@ -256,7 +256,6 @@ void J9::Recompilation::methodHasBeenRecompiled(void *oldStartPC, void *newStart
          helperAddr = TR::CodeCacheManager::instance()->findHelperTrampoline(SAMPLING_PATCH_CALL_SITE, p);
          }
 #endif
-
       offset = ((char*)helperAddr) - p - 4;
 
       *((uint32_t*)p) = offset;

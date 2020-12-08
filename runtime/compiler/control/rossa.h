@@ -88,6 +88,11 @@ typedef enum {
    compilationStreamInterrupted                    = compilationFirstJITServerFailure+4,
 #endif /* defined(J9VM_OPT_JITSERVER) */
    compilationAotHasInvokeSpecialInterface, //60
+
+#if defined(J9VM_OPT_MICROJIT)
+   mjitCompilationFailure                          = 61,
+#endif
+
    /* please insert new codes before compilationMaxError which is used in jar2jxe to test the error codes range */
    /* If new codes are added then add the corresponding names in compilationErrorNames table in rossa.cpp */
    compilationMaxError /* must be the last one */

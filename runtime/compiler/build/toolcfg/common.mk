@@ -43,6 +43,11 @@ PRODUCT_INCLUDES=\
     $(J9SRC)/oti \
     $(J9SRC)/util
 
+ifneq ($(J9VM_OPT_MICROJIT),)
+    PRODUCT_INCLUDES+=\
+        $(FIXED_SRCBASE)/compiler/microjit
+endif
+
 PRODUCT_DEFINES+=\
     BITVECTOR_BIT_NUMBERING_MSB \
     J9_PROJECT_SPECIFIC

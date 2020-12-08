@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -44,6 +44,9 @@ class TR_FrontEnd;
 class TR_OpaqueMethodBlock;
 class TR_OptimizationPlan;
 class TR_ResolvedMethod;
+#if defined(J9VM_OPT_MICROJIT)
+namespace MJIT { class CodeGenerator; }
+#endif
 namespace TR { class Instruction; }
 namespace TR { class SymbolReference; }
 
@@ -323,6 +326,9 @@ class TR_PersistentJittedBodyInfo
    friend class ::OMR::Options;
    friend class J9::Options;
    friend class TR_DebugExt;
+#if defined(J9VM_OPT_MICROJIT)
+   friend class MJIT::CodeGenerator;
+#endif
 
 #if defined(TR_HOST_X86) || defined(TR_HOST_POWER) || defined(TR_HOST_S390) || defined(TR_HOST_ARM) || defined(TR_HOST_ARM64)
    friend void fixPersistentMethodInfo(void *table, bool isJITClientAOTLoad);
@@ -409,6 +415,11 @@ class TR_PersistentJittedBodyInfo
    void setProfileInfo(TR_PersistentProfileInfo * ppi) { _profileInfo = ppi; }
    TR_PersistentProfileInfo *getProfileInfo() { return _profileInfo; }
 
+#if defined(J9VM_OPT_MICROJIT)
+   bool isMJITCompiledMethod() { return _isMJITCompiled; }
+   void setIsMJITCompiledMethod(bool b) { _isMJITCompiled = b; }
+#endif /* defined(J9VM_OPT_MICROJIT) */
+
    enum
       {
       HasLoops                = 0x0001,
@@ -440,6 +451,11 @@ class TR_PersistentJittedBodyInfo
    void                    *_mapTable;            // must be at offset 12 (24 for 64bit)
 
    // ### IMPORTANT ###
+
+
+#if defined(J9VM_OPT_MICROJIT)
+   bool _isMJITCompiled;
+#endif /* defined(J9VM_OPT_MICROJIT) */
 
    static TR_PersistentJittedBodyInfo *allocate(TR_PersistentMethodInfo *methodInfo, TR_Hotness hotness, bool profiling, TR::Compilation * comp = 0);
    TR_PersistentJittedBodyInfo(TR_PersistentMethodInfo *methodInfo, TR_Hotness hotness, bool profile, TR::Compilation * comp = 0);
