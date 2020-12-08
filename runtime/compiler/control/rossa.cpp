@@ -212,6 +212,9 @@ char *compilationErrorNames[]={
    "compilationStreamInterrupted", // 59
 #endif /* defined(J9VM_OPT_JITSERVER) */
    "compilationAotHasInvokeSpecialInterface", //60
+#if defined(J9VM_OPT_MICROJIT)
+   "mjitCompilationFailure", //61,
+#endif
    "compilationMaxError",
 };
 

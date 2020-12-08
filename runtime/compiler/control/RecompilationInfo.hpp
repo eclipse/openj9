@@ -340,6 +340,10 @@ class TR_PersistentJittedBodyInfo
    static TR_PersistentJittedBodyInfo *get(void *startPC);
 
    bool getHasLoops()               { return _flags.testAny(HasLoops); }
+#if defined(J9VM_OPT_MICROJIT)
+   bool isMJITCompiledMethod() { return _flags.testAny(IsMJITCompiled); }
+   void setIsMJITCompiledMethod(bool b) { _flags.set(IsMJITCompiled, b); }
+#endif /* defined(J9VM_OPT_MICROJIT) */
    bool getUsesPreexistence()       { return _flags.testAny(UsesPreexistence); }
    bool getDisableSampling()        { return _flags.testAny(DisableSampling);  }
    void setDisableSampling(bool b)  { _flags.set(DisableSampling, b); }
@@ -415,15 +419,12 @@ class TR_PersistentJittedBodyInfo
    void setProfileInfo(TR_PersistentProfileInfo * ppi) { _profileInfo = ppi; }
    TR_PersistentProfileInfo *getProfileInfo() { return _profileInfo; }
 
-#if defined(J9VM_OPT_MICROJIT)
-   bool isMJITCompiledMethod() { return _isMJITCompiled; }
-   void setIsMJITCompiledMethod(bool b) { _isMJITCompiled = b; }
-#endif /* defined(J9VM_OPT_MICROJIT) */
-
    enum
       {
       HasLoops                = 0x0001,
-      //HasManyIterationsLoops  = 0x0002, // Available
+#if defined(J9VM_OPT_MICROJIT)
+      IsMJITCompiled          = 0x0002,
+#endif /* defined(J9VM_OPT_MICROJIT) */
       UsesPreexistence        = 0x0004,
       DisableSampling         = 0x0008, // This flag disables sampling of this method even though its recompilable
       IsProfilingBody         = 0x0010,
@@ -451,11 +452,6 @@ class TR_PersistentJittedBodyInfo
    void                    *_mapTable;            // must be at offset 12 (24 for 64bit)
 
    // ### IMPORTANT ###
-
-
-#if defined(J9VM_OPT_MICROJIT)
-   bool _isMJITCompiled;
-#endif /* defined(J9VM_OPT_MICROJIT) */
 
    static TR_PersistentJittedBodyInfo *allocate(TR_PersistentMethodInfo *methodInfo, TR_Hotness hotness, bool profiling, TR::Compilation * comp = 0);
    TR_PersistentJittedBodyInfo(TR_PersistentMethodInfo *methodInfo, TR_Hotness hotness, bool profile, TR::Compilation * comp = 0);

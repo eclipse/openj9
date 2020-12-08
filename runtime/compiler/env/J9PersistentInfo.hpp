@@ -310,8 +310,6 @@ class PersistentInfo : public OMR::PersistentInfoConnector
 #endif /* defined(J9VM_OPT_JITSERVER) */
 
    private:
-
-
    TR_AddressSet *_unloadedClassAddresses;
    TR_AddressSet *_unloadedMethodAddresses;
 
