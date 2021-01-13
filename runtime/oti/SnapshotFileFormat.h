@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -28,6 +28,34 @@
 #if defined(J9VM_OPT_SNAPSHOTS)
 
 #include "j9nonbuilder.h"
+
+/* Fixup codes for system monitors to be persisted. These are used to aid in 
+ * mapping between OpenJ9 and OMR threads. Zero is reserved.
+ */
+#define FIXUPREFVM_UNSAFE_MEMORY_TRACKING_MUTEX 1
+#define FIXUPREFVM_VERBOSE_STATE_MUTEX 2
+#define FIXUPREFVM_JCL_CACHE_MUTEX 3
+#define FIXUPREFVM_CONSTANT_DYNAMIC_MUTEX 4 /* Java 11 */
+
+/**
+ * Information required to fix up acquired system monitors and acquired inflated object monitors.
+ *
+ * Fields:
+ * isObjectMonitor - true for object monitor, false for system monitor
+ * fixupReference - if object-monitor this will be the address of j9object_t, else the ID for vm fixup
+ * ownerVmThreadAddress - J9VMThread address of monitor owner (with ASLR off this value will not change between snapshot & restore)
+ * ownerCount - Number of times omrthread_monitor_t has been acquired by owner. It must be released the same number of times on restore
+ */
+typedef struct J9AcquiredMonitor {
+	UDATA isObjectMonitor;
+	UDATA fixupReference;
+	UDATA ownerVmThreadAddress;
+	IDATA ownerCount;
+} J9AcquiredMonitor;
+
+typedef struct J9AcquiredMonitorHeader {
+	UDATA numOfAcquiredMonitors;
+} J9AcquiredMonitorHeader;
 
 /**
  * TODO: This will not be needed once the J9JavaVM
@@ -115,6 +143,10 @@ typedef struct J9SnapshotHeader {
  *
  * --------------------
  *   SnapshotHeader
+ * --------------------
+ *  AcquiredMonitorsHeader
+ * --------------------
+ *  AcquiredMonitors data
  * --------------------
  *   MemoryRegion header
  * --------------------

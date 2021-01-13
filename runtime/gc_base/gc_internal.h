@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -190,6 +190,7 @@ extern J9_CFUNC void memoryManagerTLHAsyncCallbackHandler(J9VMThread *vmThread, 
 extern J9_CFUNC void j9gc_objaccess_staticStoreI64(J9VMThread *vmThread, J9Class *clazz, I_64 *destSlot, I_64 value, UDATA isVolatile);
 extern J9_CFUNC UDATA j9gc_objaccess_mixedObjectReadU32(J9VMThread *vmThread, j9object_t srcObject, UDATA offset, UDATA isVolatile);
 extern J9_CFUNC j9object_t J9AllocateObjectNoGC(J9VMThread *vmThread, J9Class *clazz, UDATA allocateFlags);
+extern J9_CFUNC BOOLEAN J9RefreshTLH(J9VMThread *vmThread);
 extern J9_CFUNC j9object_t J9AllocateIndexableObjectNoGC(J9VMThread *vmThread, J9Class *clazz, U_32 numberIndexedFields, UDATA allocateFlags);
 extern J9_CFUNC void memoryManagerAsyncCallbackHandler(J9VMThread *vmThread, IDATA handlerKey, void *userData);
 extern J9_CFUNC UDATA j9gc_get_overflow_safe_alloc_size(J9JavaVM *javaVM);

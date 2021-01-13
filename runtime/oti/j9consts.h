@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -178,6 +178,7 @@ extern "C" {
 #define J9_PRIVATE_FLAGS2_CHECK_PACKAGE_ACCESS 0x2
 #define J9_PRIVATE_FLAGS2_UNSAFE_HANDLE_SIGBUS 0x4
 #define J9_PRIVATE_FLAGS2_RESTORE_MAINTHREAD 0x8
+#define J9_PRIVATE_FLAGS2_SNAPSHOT_APPLICATION_THREAD 0x10
 
 #define J9_PUBLIC_FLAGS_HALT_THREAD_EXCLUSIVE 0x1
 #define J9_PUBLIC_FLAGS_DEBUG_VM_ACCESS 0x2

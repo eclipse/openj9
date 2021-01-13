@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2001, 2020 IBM Corp. and others
+ * Copyright (c) 2001, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -473,6 +473,27 @@ restart:
 				} else {
 					/* the monitor is already inflated */
 					objectMonitor = J9_INFLLOCK_OBJECT_MONITOR(lock);
+
+#if defined(J9VM_OPT_SNAPSHOTS)
+					/* restored inflated monitor will not have been fixed up if it wasn't acquired during snapshot. */
+					if (IS_RESTORE_RUN(currentThread->javaVM) && (UDATA)(objectMonitor->monitor) == 0) {
+						objectMonitor = objectMonitorInflate(currentThread, object, lock);
+						if (NULL == objectMonitor) {
+							/* out of memory */
+							result = J9_OBJECT_MONITOR_OOM;
+							goto done;
+						}
+						/* The omrthread_monitor_t:count may be wrong since objectMonitorInflate sets it to J9_FLATLOCK_COUNT(lock).
+						 * J9_FLATLOCK_COUNT is only valid if the lock is flat and since this monitor was recorded
+						 * to have been in an inflated state at the snapshot point this count is innacurate.
+						 *
+						 * Since this monitor was not acquired at the snapshot point we can assume the count at
+						 * snapshot was 0. After being initialized and acquired during objectMonitorInflate
+						 * the count should be 1.
+						 */
+						((J9ThreadAbstractMonitor*)objectMonitor->monitor)->count = 1;
+					}
+#endif /* defined(J9VM_OPT_SNAPSHOTS) */
 				}
 				if (!spinOnTryEnter(currentThread, objectMonitor, lwEA, object)) {
 					goto wouldBlock;

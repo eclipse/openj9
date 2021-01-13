@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2020 IBM Corp. and others
+ * Copyright (c) 1991, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -4271,6 +4271,7 @@ typedef struct J9InternalVMLabels {
 } J9InternalVMLabels;
 
 typedef struct J9MemoryManagerFunctions {
+	BOOLEAN  ( *J9RefreshTLH)(struct J9VMThread *vmThread);
 	j9object_t  ( *J9AllocateIndexableObject)(struct J9VMThread *vmContext, J9Class *clazz, U_32 size, UDATA allocateFlags) ;
 	j9object_t  ( *J9AllocateObject)(struct J9VMThread *vmContext, J9Class *clazz, UDATA allocateFlags) ;
 	j9object_t  ( *J9AllocateIndexableObjectNoGC)(struct J9VMThread *vmThread, J9Class *clazz, U_32 numberIndexedFields, UDATA allocateFlags) ;
@@ -5098,6 +5099,11 @@ typedef struct J9VMThread {
 #if defined(J9VM_OPT_SNAPSHOTS)
 	/* BP for the native special frame used when restoring a Java app thread */
 	UDATA *restoreThreadBP;
+	/* TODO hack in ELS, will need a real solution in the future. 
+	* Creating a copy of this large structure will impact footprint.
+	*/
+	J9VMEntryLocalStorage restoreEls;
+	UDATA waitingMonitorFixupId;
 #endif /* defined(J9VM_OPT_SNAPSHOTS) */
 } J9VMThread;
 
