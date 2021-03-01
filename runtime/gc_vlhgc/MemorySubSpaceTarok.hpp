@@ -71,9 +71,7 @@ private:
 	bool initialize(MM_EnvironmentBase *env);
 	UDATA adjustExpansionWithinFreeLimits(MM_EnvironmentBase *env, UDATA expandSize);
 	UDATA adjustExpansionWithinSoftMax(MM_EnvironmentBase *env, UDATA expandSize, UDATA minimumBytesRequired);
-	UDATA checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytesRequired);	
 	UDATA calculateExpansionSizeInternal(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy);
-
 
 	/**
 	 * @return Current GC percentage expressed as value between 0-100

@@ -72,7 +72,7 @@ MM_MemorySubSpaceTarok::getMemoryPool()
  * Return the number of memory pools associated to the receiver.
  * @return count of number of memory pools 
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getMemoryPoolCount()
 {
 	Assert_MM_unreachable();
@@ -83,7 +83,7 @@ MM_MemorySubSpaceTarok::getMemoryPoolCount()
  * Return the number of active memory pools associated to the receiver.
  * @return count of number of memory pools 
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getActiveMemoryPoolCount()
 {
 	Assert_MM_unreachable();
@@ -115,7 +115,7 @@ MM_MemorySubSpaceTarok::getMemoryPool(void * addr)
  * @return MM_MemoryPool
  */
 MM_MemoryPool *
-MM_MemorySubSpaceTarok::getMemoryPool(UDATA size)
+MM_MemorySubSpaceTarok::getMemoryPool(uintptr_t size)
 {
 	/* this function is only used by ConcurrentSweepScheme, which is disabled in Tarok */
 	Assert_MM_unreachable();
@@ -140,7 +140,7 @@ MM_MemorySubSpaceTarok::getMemoryPool(MM_EnvironmentBase *env,
 
 	if ((NULL != addrBase) && (NULL != addrTop)) {
 		MM_HeapRegionDescriptorVLHGC *descriptor = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress(addrBase);
-		MM_HeapRegionDescriptorVLHGC *highDescriptor = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress((void *)((UDATA)addrTop-1));
+		MM_HeapRegionDescriptorVLHGC *highDescriptor = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress((void *)((uintptr_t)addrTop-1));
 		/* we can only work on committed regions with in-use memory pools */
 		if (descriptor->containsObjects()) {
 			pool = descriptor->getMemoryPool();
@@ -165,7 +165,7 @@ MM_MemorySubSpaceTarok::getMemoryPool(MM_EnvironmentBase *env,
 /**
  * @copydoc MM_MemorySubSpace::getActualFreeMemorySize()
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getActualFreeMemorySize()
 {
 	if (isActive()) {
@@ -178,7 +178,7 @@ MM_MemorySubSpaceTarok::getActualFreeMemorySize()
 /**
  * @copydoc MM_MemorySubSpace::getApproximateFreeMemorySize()
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getApproximateFreeMemorySize()
 {
 	if (isActive()) {
@@ -188,14 +188,14 @@ MM_MemorySubSpaceTarok::getApproximateFreeMemorySize()
 	}
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getActiveMemorySize()
 {
 	return getCurrentSize();
 }
 
-UDATA
-MM_MemorySubSpaceTarok::getActiveMemorySize(UDATA includeMemoryType)
+uintptr_t
+MM_MemorySubSpaceTarok::getActiveMemorySize(uintptr_t includeMemoryType)
 {
 	if (getTypeFlags() & includeMemoryType) {
 		return getCurrentSize();
@@ -204,8 +204,8 @@ MM_MemorySubSpaceTarok::getActiveMemorySize(UDATA includeMemoryType)
 	}	
 }
 
-UDATA
-MM_MemorySubSpaceTarok::getActiveLOAMemorySize(UDATA includeMemoryType)
+uintptr_t
+MM_MemorySubSpaceTarok::getActiveLOAMemorySize(uintptr_t includeMemoryType)
 {
 	/* LOA is not supported in Tarok */
 	return 0;
@@ -214,17 +214,17 @@ MM_MemorySubSpaceTarok::getActiveLOAMemorySize(UDATA includeMemoryType)
 /**
  * @copydoc MM_MemorySubSpace::getActualActiveFreeMemorySize()
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getActualActiveFreeMemorySize()
 {
 	return _globalAllocationManagerTarok->getActualFreeMemorySize();
 }
 
 /**
- * @copydoc MM_MemorySubSpace::getActualActiveFreeMemorySize(UDATA)
+ * @copydoc MM_MemorySubSpace::getActualActiveFreeMemorySize(uintptr_t)
  */
-UDATA
-MM_MemorySubSpaceTarok::getActualActiveFreeMemorySize(UDATA includeMemoryType)
+uintptr_t
+MM_MemorySubSpaceTarok::getActualActiveFreeMemorySize(uintptr_t includeMemoryType)
 {
 	if (getTypeFlags() & includeMemoryType ) {
 		return _globalAllocationManagerTarok->getActualFreeMemorySize();
@@ -236,17 +236,17 @@ MM_MemorySubSpaceTarok::getActualActiveFreeMemorySize(UDATA includeMemoryType)
 /**
  * @copydoc MM_MemorySubSpace::getApproximateActiveFreeMemorySize()
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getApproximateActiveFreeMemorySize()
 {
 	return _globalAllocationManagerTarok->getApproximateFreeMemorySize();
 }
 
 /**
- * @copydoc MM_MemorySubSpace::getApproximateActiveFreeMemorySize(UDATA)
+ * @copydoc MM_MemorySubSpace::getApproximateActiveFreeMemorySize(uintptr_t)
  */
-UDATA
-MM_MemorySubSpaceTarok::getApproximateActiveFreeMemorySize(UDATA includeMemoryType)
+uintptr_t
+MM_MemorySubSpaceTarok::getApproximateActiveFreeMemorySize(uintptr_t includeMemoryType)
 {
 	if (getTypeFlags() & includeMemoryType ) {
 		return _globalAllocationManagerTarok->getApproximateFreeMemorySize();
@@ -259,7 +259,7 @@ MM_MemorySubSpaceTarok::getApproximateActiveFreeMemorySize(UDATA includeMemoryTy
 /**
  * @copydoc MM_MemorySubSpace::getApproximateActiveFreeLOAMemorySize()
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getApproximateActiveFreeLOAMemorySize()
 {
 	/* LOA is not supported in Tarok */
@@ -267,10 +267,10 @@ MM_MemorySubSpaceTarok::getApproximateActiveFreeLOAMemorySize()
 }
 
 /**
- * @copydoc MM_MemorySubSpace::getApproximateActiveFreeLOAMemorySize(UDATA)
+ * @copydoc MM_MemorySubSpace::getApproximateActiveFreeLOAMemorySize(uintptr_t)
  */
-UDATA
-MM_MemorySubSpaceTarok::getApproximateActiveFreeLOAMemorySize(UDATA includeMemoryType)
+uintptr_t
+MM_MemorySubSpaceTarok::getApproximateActiveFreeLOAMemorySize(uintptr_t includeMemoryType)
 {
 	/* LOA is not supported in Tarok */
 	return 0;
@@ -283,7 +283,7 @@ MM_MemorySubSpaceTarok::mergeHeapStats(MM_HeapStats *heapStats)
 }
 
 void
-MM_MemorySubSpaceTarok::mergeHeapStats(MM_HeapStats *heapStats, UDATA includeMemoryType)
+MM_MemorySubSpaceTarok::mergeHeapStats(MM_HeapStats *heapStats, uintptr_t includeMemoryType)
 {
 	_globalAllocationManagerTarok->mergeHeapStats(heapStats, includeMemoryType);
 }
@@ -358,7 +358,7 @@ MM_MemorySubSpaceTarok::collectorAllocate(MM_EnvironmentBase *env, MM_Collector 
 
 void *
 MM_MemorySubSpaceTarok::collectorAllocateTLH(MM_EnvironmentBase *env, MM_Collector *requestCollector, MM_AllocateDescription *allocDescription, 
-												UDATA maximumBytesRequired, void * &addrBase, void * &addrTop)
+												uintptr_t maximumBytesRequired, void * &addrBase, void * &addrTop)
 {
 	Assert_MM_unreachable();
 	return NULL;
@@ -371,7 +371,7 @@ MM_MemorySubSpaceTarok::abandonHeapChunk(void *addrBase, void *addrTop)
 {
 	if (addrBase != addrTop) {
 		MM_HeapRegionDescriptorVLHGC *base = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress(addrBase);
-		MM_HeapRegionDescriptorVLHGC *verify = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress((void *)((UDATA)addrTop - 1));
+		MM_HeapRegionDescriptorVLHGC *verify = (MM_HeapRegionDescriptorVLHGC *)_heapRegionManager->tableDescriptorForAddress((void *)((uintptr_t)addrTop - 1));
 		Assert_MM_true(base == verify);
 		/* we can only work on committed regions with in-use memory pools */
 		Assert_MM_true(base->containsObjects());
@@ -472,7 +472,7 @@ MM_MemorySubSpaceTarok::recycleRegion(MM_EnvironmentBase *env, MM_HeapRegionDesc
 	}
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::findLargestFreeEntry(MM_EnvironmentBase *env, MM_AllocateDescription *allocateDescription)
 {
 	return _globalAllocationManagerTarok->getLargestFreeEntry();
@@ -482,7 +482,7 @@ MM_MemorySubSpaceTarok::findLargestFreeEntry(MM_EnvironmentBase *env, MM_Allocat
  * Initialization
  */
 MM_MemorySubSpaceTarok *
-MM_MemorySubSpaceTarok::newInstance(MM_EnvironmentBase *env, MM_PhysicalSubArena *physicalSubArena, MM_GlobalAllocationManagerTarok *gamt, bool usesGlobalCollector, UDATA minimumSize, UDATA initialSize, UDATA maximumSize, UDATA memoryType, U_32 objectFlags)
+MM_MemorySubSpaceTarok::newInstance(MM_EnvironmentBase *env, MM_PhysicalSubArena *physicalSubArena, MM_GlobalAllocationManagerTarok *gamt, bool usesGlobalCollector, uintptr_t minimumSize, uintptr_t initialSize, uintptr_t maximumSize, uintptr_t memoryType, U_32 objectFlags)
 {
 	MM_MemorySubSpaceTarok *memorySubSpace;
 	
@@ -594,7 +594,7 @@ void
 MM_MemorySubSpaceTarok::addExistingMemory(
 	MM_EnvironmentBase *env,
 	MM_PhysicalSubArena *subArena,
-	UDATA size,
+	uintptr_t size,
 	void *lowAddress,
 	void *highAddress,
 	bool canCoalesce)
@@ -611,7 +611,7 @@ void *
 MM_MemorySubSpaceTarok::removeExistingMemory(
 	MM_EnvironmentBase *env,
 	MM_PhysicalSubArena *subArena,
-	UDATA contractSize,
+	uintptr_t contractSize,
 	void *lowAddress,
 	void *highAddress)
 {
@@ -624,7 +624,7 @@ MM_MemorySubSpaceTarok::removeExistingMemory(
 }
 
 MM_HeapRegionDescriptor * 
-MM_MemorySubSpaceTarok::selectRegionForContraction(MM_EnvironmentBase *env, UDATA numaNode)
+MM_MemorySubSpaceTarok::selectRegionForContraction(MM_EnvironmentBase *env, uintptr_t numaNode)
 {
 	MM_AllocationContextTarok * allocationContext = _globalAllocationManagerTarok->getAllocationContextForNumaNode(numaNode);
 	Assert_MM_true(NULL != allocationContext);
@@ -655,14 +655,14 @@ MM_MemorySubSpaceTarok::lockedReplenishAndAllocate(MM_EnvironmentBase *env, MM_A
 }
 
 void
-MM_MemorySubSpaceTarok::setBytesRemainingBeforeTaxation(UDATA remaining)
+MM_MemorySubSpaceTarok::setBytesRemainingBeforeTaxation(uintptr_t remaining)
 {
 	Trc_MM_setBytesRemainingBeforeTaxation(remaining);
 	_bytesRemainingBeforeTaxation = remaining;
 }
 
 bool 
-MM_MemorySubSpaceTarok::consumeFromTaxationThreshold(MM_EnvironmentBase *env, UDATA bytesToConsume)
+MM_MemorySubSpaceTarok::consumeFromTaxationThreshold(MM_EnvironmentBase *env, uintptr_t bytesToConsume)
 {
 	bool success = false;
 	
@@ -671,13 +671,13 @@ MM_MemorySubSpaceTarok::consumeFromTaxationThreshold(MM_EnvironmentBase *env, UD
 	 */
 	bool thresholdUpdated = false;
 	do {
-		UDATA oldBytesRemaining = _bytesRemainingBeforeTaxation;
+		uintptr_t oldBytesRemaining = _bytesRemainingBeforeTaxation;
 		if (oldBytesRemaining < bytesToConsume) {
 			_bytesRemainingBeforeTaxation = 0;
 			success = false;
 			thresholdUpdated = true;
 		} else {
-			UDATA newBytesRemaining = oldBytesRemaining - bytesToConsume;
+			uintptr_t newBytesRemaining = oldBytesRemaining - bytesToConsume;
 			success = true;
 			thresholdUpdated = (MM_AtomicOperations::lockCompareExchange(&_bytesRemainingBeforeTaxation, oldBytesRemaining, newBytesRemaining) == oldBytesRemaining);
 		}
@@ -690,7 +690,7 @@ void *
 MM_MemorySubSpaceTarok::replenishAllocationContextFailed(MM_EnvironmentBase *env, MM_MemorySubSpace *replenishingSpace, MM_AllocationContext *context, MM_ObjectAllocationInterface *objectAllocationInterface, MM_AllocateDescription *allocateDescription, AllocationType allocationType)
 {
 	void *result = NULL;
-	Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_Entry(env->getLanguageVMThread(), context, (UDATA)allocationType, allocateDescription->getContiguousBytes());
+	Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_Entry(env->getLanguageVMThread(), context, (uintptr_t)allocationType, allocateDescription->getContiguousBytes());
 	Assert_MM_true(this == replenishingSpace);
 
 	/* we currently have no design for handling AC replenishment in a multi-subspace world, so reach for the collector */
@@ -734,7 +734,7 @@ MM_MemorySubSpaceTarok::replenishAllocationContextFailed(MM_EnvironmentBase *env
 			collector->taxationEntryPoint(env, this, allocateDescription);
 			allocateDescription->restoreObjects(env);
 			result = lockedAllocate(env, context, objectAllocationInterface, allocateDescription, allocationType);
-			Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformTaxationAndReplenish(env->getLanguageVMThread(), context, (UDATA)allocationType, allocateDescription->getContiguousBytes(), result);
+			Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformTaxationAndReplenish(env->getLanguageVMThread(), context, (uintptr_t)allocationType, allocateDescription->getContiguousBytes(), result);
 		}
 	}
 	if (NULL == result) {
@@ -745,19 +745,19 @@ MM_MemorySubSpaceTarok::replenishAllocationContextFailed(MM_EnvironmentBase *env
 		/* first, try a resize to satisfy without invoking the collector */
 		performResize(env, allocateDescription);
 		result = lockedAllocate(env, context, objectAllocationInterface, allocateDescription, allocationType);
-		Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformResizeAndReplenish(env->getLanguageVMThread(), context, (UDATA)allocationType, allocateDescription->getContiguousBytes(), result);
+		Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformResizeAndReplenish(env->getLanguageVMThread(), context, (uintptr_t)allocationType, allocateDescription->getContiguousBytes(), result);
 		if (NULL == result) {
 			/* the resize wasn't enough so invoke the collector */
 			allocateDescription->saveObjects(env);
 			allocateDescription->setAllocationType(allocationType);
 			result = collector->garbageCollect(env, this, allocateDescription, J9MMCONSTANT_IMPLICIT_GC_DEFAULT, objectAllocationInterface, replenishingSpace, context);
-			Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformCollect(env->getLanguageVMThread(), context, (UDATA)allocationType, allocateDescription->getContiguousBytes(), result);
+			Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformCollect(env->getLanguageVMThread(), context, (uintptr_t)allocationType, allocateDescription->getContiguousBytes(), result);
 			allocateDescription->restoreObjects(env);
 			if (NULL == result) {
 				/* we _still_ failed so invoke an aggressive collect */
 				allocateDescription->saveObjects(env);
 				result = collector->garbageCollect(env, this, allocateDescription, J9MMCONSTANT_IMPLICIT_GC_AGGRESSIVE, objectAllocationInterface, replenishingSpace, context);
-				Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformAggressiveCollect(env->getLanguageVMThread(), context, (UDATA)allocationType, allocateDescription->getContiguousBytes(), result);
+				Trc_MM_MemorySubSpaceTarok_replenishAllocationContextFailed_didPerformAggressiveCollect(env->getLanguageVMThread(), context, (uintptr_t)allocationType, allocateDescription->getContiguousBytes(), result);
 				allocateDescription->restoreObjects(env);
 			}
 		}
@@ -797,13 +797,13 @@ MM_MemorySubSpaceTarok::lockedAllocate(MM_EnvironmentBase *env, MM_AllocationCon
  * Adjust the specified expansion amount by the specified user increment amount (i.e. -Xmoi)
  * @return the updated expand size
  */
-UDATA
-MM_MemorySubSpaceTarok::adjustExpansionWithinUserIncrement(MM_EnvironmentBase *env, UDATA expandSize)
+uintptr_t
+MM_MemorySubSpaceTarok::adjustExpansionWithinUserIncrement(MM_EnvironmentBase *env, uintptr_t expandSize)
 {
 	MM_GCExtensions *extensions = MM_GCExtensions::getExtensions(env->getOmrVM());
 
 	if (extensions->allocationIncrementSetByUser) {
-		UDATA expandIncrement = extensions->allocationIncrement;
+		uintptr_t expandIncrement = extensions->allocationIncrement;
 
 		/* increment of 0 means no expansion is to occur. Don't round  to a size of 0 */
 		if (0 == expandIncrement) {
@@ -824,12 +824,12 @@ MM_MemorySubSpaceTarok::adjustExpansionWithinUserIncrement(MM_EnvironmentBase *e
  * 
  * @return the amount by which the receiver can expand
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::maxExpansionInSpace(MM_EnvironmentBase *env)
 {
 	MM_GCExtensions *extensions = MM_GCExtensions::getExtensions(env->getOmrVM());
-	UDATA expandIncrement = extensions->allocationIncrement;
-	UDATA maxExpandAmount;
+	uintptr_t expandIncrement = extensions->allocationIncrement;
+	uintptr_t maxExpandAmount;
 	
 	if (extensions->allocationIncrementSetByUser) {
 		/* increment of 0 means no expansion */
@@ -849,13 +849,13 @@ MM_MemorySubSpaceTarok::maxExpansionInSpace(MM_EnvironmentBase *env)
  * available space.
  * @return The amount of heap available for contraction factoring in the size of the allocate (if applicable)
  */
-UDATA 
+uintptr_t 
 MM_MemorySubSpaceTarok::getAvailableContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
 {
 	return _physicalSubArena->getAvailableContractionSize(env, this, allocDescription);
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env, MM_Collector *requestCollector, MM_AllocateDescription *allocDescription)
 {
 	/* we inherit this collectorExpand method, but don't implement it with this signature. */
@@ -863,7 +863,7 @@ MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env, MM_Collector *r
 	return 0;
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env)
 {
 	Trc_MM_MemorySubSpaceTarok_collectorExpand_Entry(env->getLanguageVMThread());
@@ -871,14 +871,14 @@ MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env)
 	_expandLock.acquire();
 
 	/* Determine the amount to expand the heap */
-	UDATA expandSize = calculateCollectorExpandSize(env);
+	uintptr_t expandSize = calculateCollectorExpandSize(env);
 	Assert_MM_true((0 == expandSize) || (_heapRegionManager->getRegionSize() == expandSize));
 
 	_extensions->heap->getResizeStats()->setLastExpandReason(SATISFY_COLLECTOR);
 	
 	/* expand by a single region */
 	/* for the most part the code path is not multi-threaded safe, so we do this under expandLock */
-	UDATA expansionAmount= expand(env, expandSize);
+	uintptr_t expansionAmount= expand(env, expandSize);
 	Assert_MM_true((0 == expansionAmount) || (expandSize == expansionAmount));
 
 	/* Inform the requesting collector that an expand attempt took place (even if the expansion failed) */
@@ -897,20 +897,20 @@ MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env)
  * Perform the contraction/expansion based on decisions made by checkResize.
  * Adjustments in contraction size is possible (because compaction might have yielded less then optimal results),
  * therefore allocDescriptor is still passed.
- * @return the actual amount of resize (having IDATA return result will contain valid value only if contract/expand size is half of maxOfUDATA)
+ * @return the actual amount of resize (having IDATA return result will contain valid value only if contract/expand size is half of maxOfuintptr_t)
  */
 IDATA
 MM_MemorySubSpaceTarok::performResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
 {
-	UDATA oldVMState = env->pushVMstate(OMRVMSTATE_GC_PERFORM_RESIZE);
+	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_PERFORM_RESIZE);
 	MM_GCExtensions *extensions = MM_GCExtensions::getExtensions(env);
 	/* If -Xgc:fvtest=forceTenureResize is specified, then repeat a sequence of 5 expands followed by 5 contracts */	
 	if (extensions->fvtest_forceOldResize) {
-		UDATA resizeAmount = 0;
-		UDATA regionSize = _extensions->regionSize;
+		uintptr_t resizeAmount = 0;
+		uintptr_t regionSize = _extensions->regionSize;
 		resizeAmount = 2*regionSize;
 		if (5 > extensions->fvtest_oldResizeCounter) {
-			UDATA expansionSize = MM_Math::roundToCeiling(extensions->heapAlignment, resizeAmount);
+			uintptr_t expansionSize = MM_Math::roundToCeiling(extensions->heapAlignment, resizeAmount);
 			expansionSize = MM_Math::roundToCeiling(regionSize, expansionSize);
 			if (canExpand(env, expansionSize)) {
 				extensions->heap->getResizeStats()->setLastExpandReason(FORCED_NURSERY_EXPAND);
@@ -919,7 +919,7 @@ MM_MemorySubSpaceTarok::performResize(MM_EnvironmentBase *env, MM_AllocateDescri
 				extensions->fvtest_oldResizeCounter += 1;
 			}
 		} else if (10 > extensions->fvtest_oldResizeCounter) {
-			UDATA contractionSize = MM_Math::roundToCeiling(extensions->heapAlignment, resizeAmount);
+			uintptr_t contractionSize = MM_Math::roundToCeiling(extensions->heapAlignment, resizeAmount);
 			contractionSize = MM_Math::roundToCeiling(regionSize, contractionSize);
 			if (canContract(env, contractionSize)) {
 				_contractionSize = contractionSize;
@@ -953,16 +953,16 @@ MM_MemorySubSpaceTarok::performResize(MM_EnvironmentBase *env, MM_AllocateDescri
 void
 MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC)
 {
-	UDATA oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
+	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
 
 	IDATA heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
 	if (0 > heapSizeChange) {
-		_contractionSize = (UDATA)(heapSizeChange * -1);
+		_contractionSize = (uintptr_t)(heapSizeChange * -1);
 		_expansionSize = 0;
 	} else if (0 < heapSizeChange) {
 		_contractionSize = 0;
-		_expansionSize = (UDATA)heapSizeChange;
+		_expansionSize = (uintptr_t)heapSizeChange;
 	} else {
 		_contractionSize = 0;
 		_expansionSize = 0;
@@ -1033,8 +1033,8 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 	
 	/* At this point, eden is full, so all the free space is all part of tenure */
-	UDATA tenureSize = getActiveMemorySize() - (UDATA)envVLHGC->_heapSizingData.reservedSize;
-	UDATA freeTenure = (UDATA)envVLHGC->_heapSizingData.freeTenure;
+	uintptr_t tenureSize = getActiveMemorySize() - (uintptr_t)envVLHGC->_heapSizingData.reservedSize;
+	uintptr_t freeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
 
 	IDATA newFreeTenureSize = (IDATA)freeTenure + heapSizeChange;
 	IDATA newTotalMemorySize = (IDATA)tenureSize + heapSizeChange;
@@ -1050,10 +1050,10 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 		return 0;
 	}
 
-	UDATA xminf = _extensions->heapFreeMinimumRatioMultiplier;
-	UDATA xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
-	UDATA xmint = _extensions->heapContractionGCTimeThreshold;
-	UDATA xmaxt = _extensions->heapExpansionGCTimeThreshold;
+	uintptr_t xminf = _extensions->heapFreeMinimumRatioMultiplier;
+	uintptr_t xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
+	uintptr_t xmint = _extensions->heapContractionGCTimeThreshold;
+	uintptr_t xmaxt = _extensions->heapExpansionGCTimeThreshold;
 
 	double freeSpaceToGcPctRatio = (double)(xmaxt - xmint) / (xmaxf - xminf);
 
@@ -1072,7 +1072,7 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 }
 
 
-UDATA 
+uintptr_t 
 MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc) 
 {
 	
@@ -1081,7 +1081,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_Allo
 		return 0;
 	} 
 	bool expandToSatisfy = false;
-	UDATA sizeInRegionsRequired = 0;
+	uintptr_t sizeInRegionsRequired = 0;
 
 	if (NULL != allocDescription) {
 		sizeInRegionsRequired = 1;
@@ -1093,8 +1093,8 @@ MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_Allo
 		}
 	}
 
-	UDATA sizeInBytesRequired = sizeInRegionsRequired * _heapRegionManager->getRegionSize();
-	UDATA expansionSize = calculateExpansionSizeInternal(env, sizeInBytesRequired, expandToSatisfy);
+	uintptr_t sizeInBytesRequired = sizeInRegionsRequired * _heapRegionManager->getRegionSize();
+	uintptr_t expansionSize = calculateExpansionSizeInternal(env, sizeInBytesRequired, expandToSatisfy);
 	
 	return expansionSize;	
 }
@@ -1112,11 +1112,11 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 
 	/* Don't shrink if we have not met the allocation request... we will be expanding soon if possible anyway */
 	if (NULL != allocDescription) {
-		UDATA sizeInRegionsRequired = 1;
+		uintptr_t sizeInRegionsRequired = 1;
 		if (allocDescription->isArrayletSpine()) {
 			sizeInRegionsRequired += allocDescription->getNumArraylets();
 		}
-		UDATA freeRegionCount = _globalAllocationManagerTarok->getFreeRegionCount();
+		uintptr_t freeRegionCount = _globalAllocationManagerTarok->getFreeRegionCount();
 		if (sizeInRegionsRequired >= freeRegionCount) {
 			Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit4(env->getLanguageVMThread(), sizeInRegionsRequired, freeRegionCount);
 			return 0;
@@ -1125,7 +1125,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 
 	/* Don't shrink if we expanded in last extensions->heapContractionStabilizationCount global collections */
 	/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-	UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+	uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapContractionStabilizationCount > gcCount) {
 		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit5(env->getLanguageVMThread());
 		return 0;	
@@ -1135,9 +1135,9 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	 * the start of the garbage collection 
 	 */ 
 	 if (systemGC) {
-	 	UDATA minimumFree = (getActiveMemorySize() / _extensions->heapFreeMinimumRatioDivisor) 
+	 	uintptr_t minimumFree = (getActiveMemorySize() / _extensions->heapFreeMinimumRatioDivisor) 
 								* _extensions->heapFreeMinimumRatioMultiplier;
-		UDATA freeBytesAtSystemGCStart = _extensions->heap->getResizeStats()->getFreeBytesAtSystemGCStart();
+		uintptr_t freeBytesAtSystemGCStart = _extensions->heap->getResizeStats()->getFreeBytesAtSystemGCStart();
 		
 		if (freeBytesAtSystemGCStart < minimumFree) {
 	 		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit6(env->getLanguageVMThread(), freeBytesAtSystemGCStart, minimumFree);
@@ -1146,7 +1146,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	 }
 
 	MM_Heap * heap = MM_GCExtensions::getExtensions(_extensions)->getHeap();
-	UDATA actualSoftMx = heap->getActualSoftMxSize(env);
+	uintptr_t actualSoftMx = heap->getActualSoftMxSize(env);
 
 	if(0 != actualSoftMx) {
 		if(actualSoftMx < getActiveMemorySize()) {
@@ -1158,13 +1158,13 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	}
 
 	/* No need to shrink if we will not be above -Xmaxf after satisfying the allocate */
-	UDATA allocSize = allocDescription ? allocDescription->getBytesRequested() : 0;
+	uintptr_t allocSize = allocDescription ? allocDescription->getBytesRequested() : 0;
 		
 	/* How much, if any, do we need to contract by? If we entered this function in attempts to increase hybrid heap score, we need to determine
 	 * by how much the heap should shrink to meet the desired hybrid heap score. 
 	 * If not, we only entered this function in attempts to respect -Xsoftmx, and should skip this block entirely
 	 */
-	UDATA contractSize = 0;
+	uintptr_t contractSize = 0;
 	if (shouldIncreaseHybridHeapScore) {
 		contractSize = calculateTargetContractSize(env, allocSize);
 	}
@@ -1185,10 +1185,10 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
  * Expand the heap by required amount
  * @return
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::performExpand(MM_EnvironmentBase *env)
 {
-	UDATA actualExpandAmount;
+	uintptr_t actualExpandAmount;
 	
 	Trc_MM_MemorySubSpaceTarok_performExpand_Entry(env->getLanguageVMThread(), _expansionSize);
 
@@ -1202,7 +1202,7 @@ MM_MemorySubSpaceTarok::performExpand(MM_EnvironmentBase *env)
 		 * number of last gc.
 	 	 */ 
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-		UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+		uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
 		_extensions->heap->getResizeStats()->setLastHeapExpansionGCCount(gcCount);
 	}	
@@ -1215,11 +1215,11 @@ MM_MemorySubSpaceTarok::performExpand(MM_EnvironmentBase *env)
  * Determine how much we should attempt to contract heap by and call contract()
  * @return The amount we actually managed to contract the heap
  */
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::performContract(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
 {
-	UDATA contractSize, targetContractSize, maximumContractSize;
-	UDATA allocationSize = 0;
+	uintptr_t contractSize, targetContractSize, maximumContractSize;
+	uintptr_t allocationSize = 0;
 	if (NULL != allocDescription) {
 		allocationSize = allocDescription->getBytesRequested();
 	}
@@ -1264,13 +1264,13 @@ MM_MemorySubSpaceTarok::performContract(MM_EnvironmentBase *env, MM_AllocateDesc
 		Trc_MM_MemorySubSpaceTarok_performContract_Exit2(env->getLanguageVMThread());
 		return 0;	
 	} else {
-		UDATA actualContractSize= contract(env, contractSize);
+		uintptr_t actualContractSize= contract(env, contractSize);
 		if (actualContractSize > 0 ) {
 			/* Remember the gc count at the time of last contraction. If contract is outside a gc 
 	 		 * this will be number of last gc.
 	 		 */
 			/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-			UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+			uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
 			_extensions->heap->getResizeStats()->setLastHeapContractionGCCount(gcCount);
 		}	
@@ -1291,11 +1291,11 @@ MM_MemorySubSpaceTarok::performContract(MM_EnvironmentBase *env, MM_AllocateDesc
  * @note We use the approximate heap size to account for defered work that may during execution free up more memory.
  * @return the recommended amount of heap in bytes to contract.
  */
-UDATA
-MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDATA allocSize)
+uintptr_t
+MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, uintptr_t allocSize)
 {
 	Trc_MM_MemorySubSpaceTarok_calculateTargetContractSize_Entry(env->getLanguageVMThread(), allocSize);
-	UDATA contractionSize = 0;
+	uintptr_t contractionSize = 0;
 
 	/* If there is not enough memory to satisfy the alloc, don't contract.  If allocSize is greater than the total free memory,
 	 * the currentFree value is a large positive number (negative unsigned number calculated above).
@@ -1305,7 +1305,7 @@ MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDA
 	}
 
 	/* At this point, we know that our hybrid heap score is too high, so we aim to simply get within acceptable bounds */
-	UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
+	uintptr_t heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
 
 	if (0 != heapSizeWithinGoodHybridRange) {
 		/* This means the heap size we are aiming for is actually possible. This is likely always true for contraction of the heap - but may not always be true for expansion */
@@ -1333,19 +1333,19 @@ MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDA
  * @param expandToSatisfy - if TRUE ensure we epxand heap by at least "byteRequired" bytes
  * @return Number of bytes to expand. 0 if no expansion is required
  */
-UDATA
-MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, UDATA bytesRequired, bool expandToSatisfy)
+uintptr_t
+MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, uintptr_t bytesRequired, bool expandToSatisfy)
 {
-	UDATA expandSize = 0;
+	uintptr_t expandSize = 0;
 	
 	Trc_MM_MemorySubSpaceTarok_calculateExpandSize_Entry(env->getLanguageVMThread(), bytesRequired);
 
-	UDATA gcCount = _extensions->globalVLHGCStats.gcCount;
+	uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
 	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount ) {
 		/* Only expand if we didn't expand in last _extensions->heapExpansionStabilizationCount global collections */
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
-		UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
+		uintptr_t heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
 
 		expandSize = heapSizeWithinGoodHybridRange - getActiveMemorySize();
 		if (0 != expandSize) {
@@ -1386,11 +1386,11 @@ MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, 
 	return expandSize;
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 {
 	double currentHybridHeapScore = calculateCurrentHybridHeapOverhead(env);
-	UDATA reccomendedHeapSize = getActiveMemorySize();
+	uintptr_t reccomendedHeapSize = getActiveMemorySize();
 
 	/* If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
 	 * Conversely, if hybrid overhead is too low, we aim to increase the hybrid overhead to an acceptable level.
@@ -1402,7 +1402,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	bool foundAcceptableHeapSizeChange = false;
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
 	IDATA heapSizeChangeGranularity = hybridOverheadTooHigh ? (IDATA)_heapRegionManager->getRegionSize() : (-1 * (IDATA)_heapRegionManager->getRegionSize());
-	UDATA maxHeapSizeChange = 2 * reccomendedHeapSize;
+	uintptr_t maxHeapSizeChange = 2 * reccomendedHeapSize;
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
 	IDATA suggestedChange = heapSizeChangeGranularity;
@@ -1441,7 +1441,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	 */
 	if (!foundAcceptableHeapSizeChange) {
 		/* Expansion and contraction may increase/decrease by larger/smaller amounts */
-		UDATA sizeChangeFactor = 0;
+		uintptr_t sizeChangeFactor = 0;
 
 		/* percentDiff is represented as percent between 0 - 100 */
 		double percentDiff = 0.0;
@@ -1470,7 +1470,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* Since percentDiff is 0 - 100, make sure to convert it to 0-1 percentage */
 		double heapSizePercentChange = (1.0 + ((double)sizeChangeFactor * (percentDiff / 100 )));
 		Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_2(env->getLanguageVMThread(), heapSizePercentChange);
-		reccomendedHeapSize = (UDATA)(heapSizePercentChange * reccomendedHeapSize);
+		reccomendedHeapSize = (uintptr_t)(heapSizePercentChange * reccomendedHeapSize);
 	}
 
 	return reccomendedHeapSize;
@@ -1489,7 +1489,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 	if (_previouslyObservedPGCCount != envVLHGC->_heapSizingData.pgcCountSinceGMPEnd) {
 		/* Resizing after a PGC */
 
-		UDATA pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
+		uintptr_t pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
 
 		if ((0 == pgcCount) && (0 == _lastObservedGcPercentage)) {
 			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold */
@@ -1502,13 +1502,13 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 				 * Main idea is that the change in number of pgc's (per gmp) will be proportional to how much free tenure changes;
 				 */
 				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
-				UDATA currentFreeTenure = (UDATA)envVLHGC->_heapSizingData.freeTenure;
-				UDATA potentialFreeTenure = currentFreeTenure + heapSizeChange;
+				uintptr_t currentFreeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
+				uintptr_t potentialFreeTenure = currentFreeTenure + heapSizeChange;
 				if (heapSizeChange <= (-1 * (IDATA)currentFreeTenure) ) {
 					/* If we try to shrink too much, too fast, tenure will be way too small, causing lots of GC work */
 					potentialFreeTenure = 1;
 				}
-				pgcCount = (UDATA)(((double)potentialFreeTenure / currentFreeTenure) * pgcCount);
+				pgcCount = (uintptr_t)(((double)potentialFreeTenure / currentFreeTenure) * pgcCount);
 			}
 
 			double gcActiveTime = (double)(pgcCount * envVLHGC->_heapSizingData.avgPgcTimeUs) + envVLHGC->_heapSizingData.gmpTime; 
@@ -1533,13 +1533,13 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 	return _lastObservedGcPercentage;
 }
 
-UDATA
+uintptr_t
 MM_MemorySubSpaceTarok::calculateCollectorExpandSize(MM_EnvironmentBase *env)
 {
 	Trc_MM_MemorySubSpaceTarok_calculateCollectorExpandSize_Entry(env->getLanguageVMThread());
 	
 	/* expand by a single region */
-	UDATA expandSize = _heapRegionManager->getRegionSize(); 
+	uintptr_t expandSize = _heapRegionManager->getRegionSize(); 
 	
 	/* Adjust within -XsoftMx limit */
 	expandSize = adjustExpansionWithinSoftMax(env, expandSize,0);
@@ -1550,87 +1550,14 @@ MM_MemorySubSpaceTarok::calculateCollectorExpandSize(MM_EnvironmentBase *env)
 }
 
 /**
- * Determine if a  expand is required 
- * @note We use the approximate heap size to account for defered work that may during execution free up more memory.
- * @return expand size if ratio expand required or 0 otherwise
- */
-UDATA
-MM_MemorySubSpaceTarok::checkForRatioExpand(MM_EnvironmentBase *env, UDATA bytesRequired)
-{
-	Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Entry(env->getLanguageVMThread(), bytesRequired);
-	
-	UDATA currentFree, maxFree;
-
-	/* How many bytes currently free ? */	 
-	currentFree = getApproximateActiveFreeMemorySize();
-						 
-	/* How many bytes free would constitute -Xmaxf at current heap size ? */				 
-	maxFree = (UDATA)(((U_64)getActiveMemorySize()  * _extensions->heapFreeMaximumRatioMultiplier)
-														 / ((U_64)_extensions->heapFreeMaximumRatioDivisor));
-														 
-	/* If we have hit -Xmaxf limit already ...return immediately */													 
-	if (currentFree >= maxFree) { 
-		Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Exit1(env->getLanguageVMThread());
-		return 0;
-	}														 
-						 
-	/* Ask for percentage of time being spent in GC */
-	U_32 gcPercentage = (U_32)calculateGcPctForHeapChange(env, 0);
-
-	/* Is too much time is being spent in GC? */
-	if (gcPercentage < _extensions->heapExpansionGCTimeThreshold) {
-		Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Exit2(env->getLanguageVMThread(), gcPercentage);
-		return 0;
-	} else { 
-		/* 
-		 * We are spending too much time in gc and are below -Xmaxf free space so expand to 
-		 * attempt to reduce gc time.
-		 * 
-		 * At this point we already know we have -Xminf storage free. 
-		 * 
-		 * We expand by HEAP_FREE_RATIO_EXPAND_MULTIPLIER percentage provided this does not take us above
-		 * -Xmaxf. If it does we expand up to the -Xmaxf limit.
-		 */ 
-		UDATA ratioExpandAmount, maxExpandSize;
-			
-		/* How many bytes (maximum) do we want to expand by ?*/
-		ratioExpandAmount =(UDATA)(((U_64)getActiveMemorySize()  * HEAP_FREE_RATIO_EXPAND_MULTIPLIER)
-						 / ((U_64)HEAP_FREE_RATIO_EXPAND_DIVISOR));		
-						 
-		/* If user has set -Xmaxf1.0 then they do not care how much free space we have
-		 * so no need to limit expand size here. Expand size will later be checked  
-		 * against -Xmaxe value.
-		 */
-		if (_extensions->heapFreeMaximumRatioMultiplier < 100 ) {					 
-			
-			/* By how much could we expand current heap without taking us above -Xmaxf bytes in 
-			 * resulting new (larger) heap
-			 */ 
-			maxExpandSize = ((maxFree - currentFree) / (100 - _extensions->heapFreeMaximumRatioMultiplier)) *
-								_extensions->heapFreeMaximumRatioDivisor;
-				
-			ratioExpandAmount = OMR_MIN(maxExpandSize,ratioExpandAmount);
-		}	
-
-		/* Round expansion amount UP to heap alignment */
-		ratioExpandAmount = MM_Math::roundToCeiling(_extensions->heapAlignment, ratioExpandAmount);	
-				
-		Trc_MM_MemorySubSpaceTarok_checkForRatioExpand_Exit3(env->getLanguageVMThread(), gcPercentage, ratioExpandAmount);
-		return ratioExpandAmount;
-	}
-}	
-	
-
-
-/**
  * Compare the specified expand amount with the specified minimum and maximum expansion amounts
  * (-Xmine and -Xmaxe command line options) and round the amount to within these limits
  * @return Updated expand size
  */		
-MMINLINE UDATA		
-MM_MemorySubSpaceTarok::adjustExpansionWithinFreeLimits(MM_EnvironmentBase *env, UDATA expandSize)
+MMINLINE uintptr_t		
+MM_MemorySubSpaceTarok::adjustExpansionWithinFreeLimits(MM_EnvironmentBase *env, uintptr_t expandSize)
 {		
-	UDATA result = expandSize;
+	uintptr_t result = expandSize;
 	
 	if (expandSize > 0 ) { 
 		if(_extensions->heapExpansionMinimumSize > 0 ) {
@@ -1648,12 +1575,12 @@ MM_MemorySubSpaceTarok::adjustExpansionWithinFreeLimits(MM_EnvironmentBase *env,
  * Compare the specified expand amount with -XsoftMX value
  * @return Updated expand size
  */		
-MMINLINE UDATA		
-MM_MemorySubSpaceTarok::adjustExpansionWithinSoftMax(MM_EnvironmentBase *env, UDATA expandSize, UDATA minimumBytesRequired)
+MMINLINE uintptr_t		
+MM_MemorySubSpaceTarok::adjustExpansionWithinSoftMax(MM_EnvironmentBase *env, uintptr_t expandSize, uintptr_t minimumBytesRequired)
 {
 	MM_Heap * heap = env->getExtensions()->getHeap();
-	UDATA actualSoftMx = heap->getActualSoftMxSize(env);
-	UDATA activeMemorySize = getActiveMemorySize();
+	uintptr_t actualSoftMx = heap->getActualSoftMxSize(env);
+	uintptr_t activeMemorySize = getActiveMemorySize();
 	PORT_ACCESS_FROM_ENVIRONMENT(env);
 	
 	if (0 != actualSoftMx) {
