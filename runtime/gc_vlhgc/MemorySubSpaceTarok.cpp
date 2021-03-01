@@ -957,10 +957,10 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 
 	IDATA heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
-	if (heapSizeChange < 0) {
+	if (0 > heapSizeChange) {
 		_contractionSize = (UDATA)(heapSizeChange * -1);
 		_expansionSize = 0;
-	} else if (heapSizeChange > 0) {
+	} else if (0 < heapSizeChange) {
 		_contractionSize = 0;
 		_expansionSize = (UDATA)heapSizeChange;
 	} else {
@@ -1001,7 +1001,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
 	}
 
-	if (0 == sizeChange && hybridHeapScore >= (double)_extensions->heapContractionGCTimeThreshold) {
+	if ((0 == sizeChange) && ((double)_extensions->heapContractionGCTimeThreshold <= hybridHeapScore)) {
 		/* There are certain edge cases where the heap should shrink in order to respect Xsoftmx, that will not be picked up if hybrid heap score is ABOVE heapContractionGCTimeThreshold 
 		 * We need to inform the calculateContractionSize() that it should not try to get the hybrid heap score within acceptable bounds, but rather, should 
 		 * just make sure -Xsoftmx is being respected
@@ -1040,12 +1040,12 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 	IDATA newTotalMemorySize = (IDATA)tenureSize + heapSizeChange;
 	double freeMemoryRatio = ((double)newFreeTenureSize/ (double)newTotalMemorySize) * 100;
 
-	if (freeMemoryRatio == 0 || newTotalMemorySize <= 0 || newFreeTenureSize <= 0) {
+	if ((0 == freeMemoryRatio) || (0 >= newTotalMemorySize) || (0 >= newFreeTenureSize)) {
 		/* The heap size change will result in no free memory left - return a very high score, suggesting expansion */
 		return 100.0;
 	}
 
-	if (freeMemoryRatio == 100.0) {
+	if (100.0 == freeMemoryRatio) {
 		/* Tenure is empty. Suggest contraction */
 		return 0;
 	}
@@ -1169,7 +1169,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 		contractSize = calculateTargetContractSize(env, allocSize);
 	}
 	
-	if (contractSize == 0 ) {
+	if (0 == contractSize) {
 		Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit3(env->getLanguageVMThread());
 		return 0;
 	}		
@@ -1307,7 +1307,7 @@ MM_MemorySubSpaceTarok::calculateTargetContractSize(MM_EnvironmentBase *env, UDA
 	/* At this point, we know that our hybrid heap score is too high, so we aim to simply get within acceptable bounds */
 	UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
 
-	if (heapSizeWithinGoodHybridRange != 0) {
+	if (0 != heapSizeWithinGoodHybridRange) {
 		/* This means the heap size we are aiming for is actually possible. This is likely always true for contraction of the heap - but may not always be true for expansion */
 
 		contractionSize = getActiveMemorySize() - heapSizeWithinGoodHybridRange;
@@ -1348,7 +1348,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, 
 		UDATA heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
 
 		expandSize = heapSizeWithinGoodHybridRange - getActiveMemorySize();
-		if (expandSize != 0 ) {
+		if (0 != expandSize) {
 			_extensions->heap->getResizeStats()->setLastExpandReason(FREE_SPACE_LOW_OR_GC_HIGH);
 		}
 	}
@@ -1424,7 +1424,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* Test what will happen to gc cpu % and free memory % if we expand/contract by heapSizeChange bytes */
 		double potentialHybridOverhead = calculateHybridHeapOverhead(env, suggestedChange);
 
-		if (potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold && potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold) {
+		if ((potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold) && (potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold)) {
 			/* The heap size we tested will give us an acceptable amount of free space, and better gc cpu % */
 			reccomendedHeapSize += suggestedChange;
 			foundAcceptableHeapSizeChange = true;
@@ -1491,7 +1491,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 
 		UDATA pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
 
-		if (pgcCount == 0 && _lastObservedGcPercentage == 0) {
+		if ((0 == pgcCount) && (0 == _lastObservedGcPercentage)) {
 			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold */
 			_lastObservedGcPercentage = (double)_extensions->heapExpansionGCTimeThreshold;
 

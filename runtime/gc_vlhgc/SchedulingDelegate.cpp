@@ -170,10 +170,10 @@ MM_SchedulingDelegate::calculateGlobalMarkOverhead(MM_EnvironmentVLHGC *env) {
 	U_64 potentialGMPWorkTime =  _globalMarkIncrementsTotalTime + _globalSweepTimeUs + (U_64)(concurrentCostUs * 0.5);
 	double potentialOverhead = (double)potentialGMPWorkTime/globalMarkIntervalTime;
 
-	if (potentialOverhead > 0 && potentialOverhead < 1 && _globalMarkIntervalStartTime != 0) {
+	if ((0.0 < potentialOverhead) && (1.0 > potentialOverhead) && (0 != _globalMarkIntervalStartTime)) {
 		/* Make sure no clock error occured */
 		_totalGMPWorkTimeUs = potentialGMPWorkTime;
-	} else if (_totalGMPWorkTimeUs == 0) {
+	} else if (0 == _totalGMPWorkTimeUs) {
 		/* At the very beggining of a run, assume GMP time is 5x larger than avg pgc time.
 		 * This is a very rough approximation, but it gives us enough data to make decision about eden size
 		 */
@@ -263,7 +263,7 @@ MM_SchedulingDelegate::partialGarbageCollectStarted(MM_EnvironmentVLHGC *env)
 	PORT_ACCESS_FROM_ENVIRONMENT(env);
 
 	/* Don't count the very first PGC */
-	if (_partialGcStartTime != 0) {
+	if (0 != _partialGcStartTime) {
 		double pgcIntervalHistoricWeight = 0.5;
 		U_64 recentPgcInterval = j9time_hires_delta(_partialGcStartTime, j9time_hires_clock(), J9PORT_TIME_DELTA_IN_MICROSECONDS);
 		_averagePgcInterval = (UDATA)(pgcIntervalHistoricWeight * _averagePgcInterval) + (UDATA)((1- pgcIntervalHistoricWeight) * recentPgcInterval);
@@ -277,7 +277,7 @@ MM_SchedulingDelegate::partialGarbageCollectStarted(MM_EnvironmentVLHGC *env)
 void
 MM_SchedulingDelegate::calculatePartialGarbageCollectOverhead(MM_EnvironmentVLHGC *env) {
 
-	if (0 == _averagePgcInterval || 0 == _historicalPartialGCTime) {
+	if ((0 == _averagePgcInterval) || (0 == _historicalPartialGCTime)) {
 		/* On the very first PGC, we can't calculate overhead */
 		return;
 	}
@@ -636,7 +636,7 @@ UDATA
 MM_SchedulingDelegate::calculateRecommendedEdenSize(MM_EnvironmentVLHGC *env) 
 {
 
-	if (_pgcCountSinceGMPEnd == 0) {
+	if (0 == _pgcCountSinceGMPEnd) {
 		/* No statistics have been collected - just return the current eden size */
 		return getCurrentEdenSizeInBytes(env);
 	}
@@ -1293,7 +1293,7 @@ MM_SchedulingDelegate::moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, doubl
 {
 	Assert_MM_true(edenChangeSpeed <= 1 && edenChangeSpeed >= 0);
 
-	if (0 == _historicalPartialGCTime || 0 == _averagePgcInterval) {
+	if ((0 == _historicalPartialGCTime) || (0 == _averagePgcInterval)) {
 		/* Until we have collected any information about PGC time, we don't have the data we need to make informed decision about eden size  */
 		return;
 	}
@@ -1552,7 +1552,7 @@ MM_SchedulingDelegate::heapReconfigured(MM_EnvironmentVLHGC *env)
 		edenIdealBytes = getIdealEdenSizeInBytes(env);
 	} else if (currentHeapSize == maximumHeap) {
 		/* we are fully expanded or mx == ms so just return the maximum ideal eden */
-		edenIdealBytes = edenMaximumBytes; 
+		edenIdealBytes = edenMaximumBytes;
 	} else {
 		/* interpolate between the maximum and minimum */
 		/* This logic follows the formula given in JAZZ 39694
