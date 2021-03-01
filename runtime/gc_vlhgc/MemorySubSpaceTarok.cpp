@@ -983,7 +983,8 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 {
 	IDATA sizeChange = 0;
 
-	/* Heap sizing is driven by "hybrid Heap overhead". This is a blended value, which combines free memory in "tenure" along with observed GC overhead.
+	/* 
+	 * Heap sizing is driven by "hybrid Heap overhead". This is a blended value, which combines free memory in "tenure" along with observed GC overhead.
 	 * If the hybrid score is too high (can be acheived by low free memory %, high gc %, or a hybrid of the 2), then the heap calculates an expansion value.
 	 * If the hybrid score is too low (can be acheived with high free memory %, low gc %, or hybrid of the 2), then the heap calculates a contraction value.
 	 * 
@@ -1002,7 +1003,8 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 	}
 
 	if ((0 == sizeChange) && ((double)_extensions->heapContractionGCTimeThreshold <= hybridHeapScore)) {
-		/* There are certain edge cases where the heap should shrink in order to respect Xsoftmx, that will not be picked up if hybrid heap score is ABOVE heapContractionGCTimeThreshold 
+		/* 
+		 * There are certain edge cases where the heap should shrink in order to respect Xsoftmx, that will not be picked up if hybrid heap score is ABOVE heapContractionGCTimeThreshold 
 		 * We need to inform the calculateContractionSize() that it should not try to get the hybrid heap score within acceptable bounds, but rather, should 
 		 * just make sure -Xsoftmx is being respected
 		 */
@@ -1160,7 +1162,8 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	/* No need to shrink if we will not be above -Xmaxf after satisfying the allocate */
 	uintptr_t allocSize = allocDescription ? allocDescription->getBytesRequested() : 0;
 		
-	/* How much, if any, do we need to contract by? If we entered this function in attempts to increase hybrid heap score, we need to determine
+	/* 
+	 * How much, if any, do we need to contract by? If we entered this function in attempts to increase hybrid heap score, we need to determine
 	 * by how much the heap should shrink to meet the desired hybrid heap score. 
 	 * If not, we only entered this function in attempts to respect -Xsoftmx, and should skip this block entirely
 	 */
@@ -1392,7 +1395,8 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	double currentHybridHeapScore = calculateCurrentHybridHeapOverhead(env);
 	uintptr_t reccomendedHeapSize = getActiveMemorySize();
 
-	/* If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
+	/* 
+	 * If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
 	 * Conversely, if hybrid overhead is too low, we aim to increase the hybrid overhead to an acceptable level.
 	 * 
 	 * In order to decrease hybrid overhead, heap must expand. When the heap expands, gc cpu % will decrease, and free memory % will increase, resulting in a lower overhead.
@@ -1435,7 +1439,8 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		}
 	}
 
-	/* If looking at the overhead curve did not work, base the expansion/contraction off of how high/low the hybrid overhead is. 
+	/* 
+	 * If looking at the overhead curve did not work, base the expansion/contraction off of how high/low the hybrid overhead is. 
 	 * For each % above heapExpansionGCTimeThreshold, expand more aggresively. 
 	 * Ie, if heapExpansionGCTimeThreshold = 13, and measured hybrid overhead is 20, we want to expand by a larger amount than if measured hybrid overhead is 14.
 	 */
@@ -1482,9 +1487,10 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 {
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
-	/* Since we only attempt to resize after PGC's and Global GC's, if the PGC count has increased, it means we are resizing after a PGC
-	* and the GMP and PGC statistics we have collected, are useable. Otherwise, use backup methods which are independant of heapSizeChange
-	*/
+	/* 
+	 * Since we only attempt to resize after PGC's and Global GC's, if the PGC count has increased, it means we are resizing after a PGC
+	 * and the GMP and PGC statistics we have collected, are useable. Otherwise, use backup methods which are independant of heapSizeChange
+	 */
 
 	if (_previouslyObservedPGCCount != envVLHGC->_heapSizingData.pgcCountSinceGMPEnd) {
 		/* Resizing after a PGC */
@@ -1498,7 +1504,8 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 		} else {
 
 			if (0 != heapSizeChange) {
-				/* Determine what the gc cpu % would be if we changed the heap by heapSizeChange bytes
+				/* 
+				 * Determine what the gc cpu % would be if we changed the heap by heapSizeChange bytes
 				 * Main idea is that the change in number of pgc's (per gmp) will be proportional to how much free tenure changes;
 				 */
 				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
@@ -1519,7 +1526,8 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 		}
 
 	} else {
-		/* Resizing the heap after global GC. The PGC and GMP timing data MAY no longer be accurate - look at backup methods. 
+		/* 
+		 * Resizing the heap after global GC. The PGC and GMP timing data MAY no longer be accurate - look at backup methods. 
 		 * The values below do not change if heapSizeChange != 0, since global GC is proportional to live data in heap, rather than heap size. 
 		 * This means changing the heap size will not change the gc% by much
 		 */

@@ -134,7 +134,8 @@ public:
 	 */
 	MM_EnvironmentVLHGC(J9JavaVM *javaVM);
 
-	/** When a GMP recently occured, GMP should be weighted according to how many PGC's occured before the GMP (historically) - NOT how many we currently observe.
+	/* 
+	 * When a GMP recently occured, GMP should be weighted according to how many PGC's occured before the GMP (historically) - NOT how many we currently observe.
 	 *	If we saw 200 Pgc's before the recent GMP cycle, then we assume that we will still have around 200 PGC's, that is, until we are informed that this count is higher
 	 *	If only had 2 PGC's happened before the last GMP, then GMP indeed has significant weight, and reading from _previousPgcPerGmpCount, will inform us of that	 
 	 *  @return A PGC count which is representative of what we will likely observe until the next GMP

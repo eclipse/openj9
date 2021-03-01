@@ -181,15 +181,15 @@ j9gc_initialize_parse_gc_colon(J9JavaVM *javaVM, char **scan_start)
 			goto _error;
 		}
 
-		#if defined(J9VM_GC_REALTIME)
+#if defined(J9VM_GC_REALTIME)
 			/* convert the unit to microseconds and store in extensions */
 			extensions->beatMicro = beatMilli * 1000;
-		#endif /* J9VM_GC_REALTIME */
+#endif /* J9VM_GC_REALTIME */
 		
-		#if defined(J9VM_GC_VLHGC)
+#if defined(J9VM_GC_VLHGC)
 		    /* Save soft pause target for balanced */
 			extensions->tarokTargetMaxPauseTime = beatMilli;
-		#endif
+#endif
 
 		goto _exit;
 	}

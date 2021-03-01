@@ -158,7 +158,8 @@ MM_ParallelGlobalMarkTask::setup(MM_EnvironmentBase *envBase)
 	env->_markVLHGCStats.clear();
 	env->_workPacketStats.clear();
 
-	/* Get gc threads cpu time for when mark started, and add it to the stats structure.
+	/* 
+	 * Get gc threads cpu time for when mark started, and add it to the stats structure.
 	 * If the current platform does not support this operation, there are failsafes in place - no need for an else condition here
 	 */
 	int64_t gcThreadCpuTime = omrthread_get_cpu_time(env->getOmrVMThread()->_os_thread);
@@ -177,7 +178,8 @@ MM_ParallelGlobalMarkTask::cleanup(MM_EnvironmentBase *envBase)
 	MM_EnvironmentVLHGC *env = MM_EnvironmentVLHGC::getEnvironment(envBase);
 	PORT_ACCESS_FROM_ENVIRONMENT(env);
 
-	/* Get gc threads cpu time for when mark finished, and add it to the stats structure 
+	/* 
+	 * Get gc threads cpu time for when mark finished, and add it to the stats structure 
 	 * If the current platform does not support this operation, there are failsafes in place - no need for an else condition here
 	 */
 	int64_t gcThreadCpuTime = omrthread_get_cpu_time(env->getOmrVMThread()->_os_thread);
