@@ -84,14 +84,14 @@ private:
 	 *  @param heapSizeChange represents how many bytes we increase/decrease the heap by
 	 *  @return GC percentage expressed as a value between 0 and 100, that will occur if we change heap by heapSizeChange bytes. 
 	 */
-	double calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDATA heapSizeChange);
+	double calculateGcPctForHeapChange(MM_EnvironmentBase *env, intptr_t heapSizeChange);
 
 	/**
 	 * Calculate by how many bytes we should change the current heap size. 
 	 * @return positive number of bytes representing how many bytes the heap should expand. 
 	 * 		   If heap should contract, a negative representing how many bytes the heap should contract is returned.
 	 */
-	IDATA calculateHeapSizeChange(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC);
+	intptr_t calculateHeapSizeChange(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC);
 
 	/**
 	 * Calculate the 'hybrid overhead' for the current heap size. It is a hybrid value combining gc ratio, and free tenure heap space 
@@ -105,7 +105,7 @@ private:
 	 * @param heapSizeChange by how many bytes the heap will change
 	 * @return the hybrid heap overhead if the heap were to change by heapSizeChange bytes
 	 */ 
-	double calculateHybridHeapOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange);
+	double calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange);
 
 	/**
 	 * Maps free memory percentage into a "equivalent" gc percentage. 
@@ -114,7 +114,7 @@ private:
 	 * @param heapSizeChange how much the heapSize will change. If passing in 0, this function will return the current memory overhead
 	 * @return the mapped value of free memory to gc%
 	 */ 
-	double mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange);
+	double mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange);
 
 	/**
 	 * @return the number of bytes by which the heap should expand. Return 0 if expansion is not desired, or not possible.
@@ -125,7 +125,7 @@ private:
 	 * @param shouldIncreaseHybridHeapScore informs the function that it should try to contract in order to meet the hybrid heap score requirements. If this is set to false, then we enter this function only to meet -Xsoftmx
 	 * @return the number of bytes by which the heap should contract. Return 0 if contraction is not desired, or not possible
 	 */
-	IDATA calculateContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC, bool shouldIncreaseHybridHeapScore);
+	intptr_t calculateContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC, bool shouldIncreaseHybridHeapScore);
 
 	/**
 	 * Attempts to calculate what size of heap will give a hybrid heap score within the acceptable bounds (between heapExpansionGCTimeThreshold and heapContractionGCTimeThreshold). 
@@ -236,7 +236,7 @@ public:
 	virtual uintptr_t getAvailableContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);	
 
 	virtual void checkResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription = NULL, bool _systemGC = false);
-	virtual IDATA performResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription = NULL);
+	virtual intptr_t performResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription = NULL);
 
 	virtual void abandonHeapChunk(void *addrBase, void *addrTop);
 

@@ -897,9 +897,9 @@ MM_MemorySubSpaceTarok::collectorExpand(MM_EnvironmentBase *env)
  * Perform the contraction/expansion based on decisions made by checkResize.
  * Adjustments in contraction size is possible (because compaction might have yielded less then optimal results),
  * therefore allocDescriptor is still passed.
- * @return the actual amount of resize (having IDATA return result will contain valid value only if contract/expand size is half of maxOfuintptr_t)
+ * @return the actual amount of resize (having intptr_t return result will contain valid value only if contract/expand size is half of maxOfuintptr_t)
  */
-IDATA
+intptr_t
 MM_MemorySubSpaceTarok::performResize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
 {
 	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_PERFORM_RESIZE);
@@ -934,10 +934,10 @@ MM_MemorySubSpaceTarok::performResize(MM_EnvironmentBase *env, MM_AllocateDescri
 		}
 	}	
 	
-	IDATA resizeAmount = 0;
+	intptr_t resizeAmount = 0;
 
 	if (_contractionSize != 0) {
-		resizeAmount = -(IDATA)performContract(env, allocDescription);
+		resizeAmount = -(intptr_t)performContract(env, allocDescription);
 	} else if (_expansionSize != 0) {
 		resizeAmount = performExpand(env);
 	}
@@ -955,7 +955,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 {
 	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
 
-	IDATA heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
+	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
 	if (0 > heapSizeChange) {
 		_contractionSize = (uintptr_t)(heapSizeChange * -1);
@@ -978,10 +978,10 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
  * @return positive number of bytes represents how many bytes the heap should expand. 
  * 		   If heap should contract, a negative number representing how many bytes the heap should contract is returned.
  */
-IDATA
+intptr_t
 MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool _systemGC) 
 {
-	IDATA sizeChange = 0;
+	intptr_t sizeChange = 0;
 
 	/* 
 	 * Heap sizing is driven by "hybrid Heap overhead". This is a blended value, which combines free memory in "tenure" along with observed GC overhead.
@@ -996,7 +996,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 	/* Based on the hybrid overhead of gc cpu, and free memory, decide if heap should expand or contract */
 	if (hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold) {
 		/* Try to expand the heap */
-		sizeChange = (IDATA)calculateExpansionSize(env, allocDescription, _systemGC);
+		sizeChange = (intptr_t)calculateExpansionSize(env, allocDescription, _systemGC);
 	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold) {
 		/* Try to contract the heap */
 		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
@@ -1015,7 +1015,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 }	
 
 double
-MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, IDATA heapChange)
+MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapChange)
 {
 	double gcOverheadWeight = 0.5;
 	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
@@ -1025,11 +1025,10 @@ MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, IDA
 		/* Do not trigger this tracepoint for heapChange != 0, since this function is run dozens of time when changing heap size */
 		Trc_MM_MemorySubSpaceTarok_calculateHybridHeapOverhead(env->getLanguageVMThread(), gcPercentage, freeMemComponant);
 	}
-
-	return 	(gcPercentage * gcOverheadWeight) + (freeMemComponant * (1 - gcOverheadWeight)); 
+	return MM_Math::weightedAverage(gcPercentage, freeMemComponant, gcOverheadWeight);
 }
 
-double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, IDATA heapSizeChange)
+double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange)
 {
 	/* With the model being used to map free memory % to gc %, if free memory is very low, the model will increasingly suggest expansion to avoid OOM errors*/
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
@@ -1038,8 +1037,8 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 	uintptr_t tenureSize = getActiveMemorySize() - (uintptr_t)envVLHGC->_heapSizingData.reservedSize;
 	uintptr_t freeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
 
-	IDATA newFreeTenureSize = (IDATA)freeTenure + heapSizeChange;
-	IDATA newTotalMemorySize = (IDATA)tenureSize + heapSizeChange;
+	intptr_t newFreeTenureSize = (intptr_t)freeTenure + heapSizeChange;
+	intptr_t newTotalMemorySize = (intptr_t)tenureSize + heapSizeChange;
 	double freeMemoryRatio = ((double)newFreeTenureSize/ (double)newTotalMemorySize) * 100;
 
 	if ((0 == freeMemoryRatio) || (0 >= newTotalMemorySize) || (0 >= newFreeTenureSize)) {
@@ -1101,7 +1100,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_Allo
 	return expansionSize;	
 }
 
-IDATA 
+intptr_t 
 MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool systemGC, bool shouldIncreaseHybridHeapScore)
 {
 	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Entry(env->getLanguageVMThread(), systemGC ? "true" : "false");
@@ -1153,7 +1152,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	if(0 != actualSoftMx) {
 		if(actualSoftMx < getActiveMemorySize()) {
 			/* the softmx is less than the currentsize so we're going to attempt an aggressive contract */
-			IDATA contractionSize = (IDATA)(getActiveMemorySize() - actualSoftMx) * -1;
+			intptr_t contractionSize = (intptr_t)(getActiveMemorySize() - actualSoftMx) * -1;
 			_extensions->heap->getResizeStats()->setLastContractReason(SATISFY_SOFT_MX);
 			return contractionSize;
 		}
@@ -1181,7 +1180,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	_extensions->heap->getResizeStats()->setLastContractReason(FREE_SPACE_HIGH_OR_GC_LOW);
 		
 	Trc_MM_MemorySubSpaceTarok_timeForHeapContract_Exit7(env->getLanguageVMThread(), contractSize);
-	return (IDATA)contractSize * -1;
+	return (intptr_t)contractSize * -1;
 }
 
 /**
@@ -1393,7 +1392,7 @@ uintptr_t
 MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 {
 	double currentHybridHeapScore = calculateCurrentHybridHeapOverhead(env);
-	uintptr_t reccomendedHeapSize = getActiveMemorySize();
+	uintptr_t recommendedHeapSize = getActiveMemorySize();
 
 	/* 
 	 * If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
@@ -1405,22 +1404,22 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	bool hybridOverheadTooHigh = currentHybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold;
 	bool foundAcceptableHeapSizeChange = false;
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
-	IDATA heapSizeChangeGranularity = hybridOverheadTooHigh ? (IDATA)_heapRegionManager->getRegionSize() : (-1 * (IDATA)_heapRegionManager->getRegionSize());
-	uintptr_t maxHeapSizeChange = 2 * reccomendedHeapSize;
+	intptr_t heapSizeChangeGranularity = hybridOverheadTooHigh ? (intptr_t)_heapRegionManager->getRegionSize() : (-1 * (intptr_t)_heapRegionManager->getRegionSize());
+	uintptr_t maxHeapSizeChange = 2 * recommendedHeapSize;
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
-	IDATA suggestedChange = heapSizeChangeGranularity;
+	intptr_t suggestedChange = heapSizeChangeGranularity;
 	/* Move the heap size in the right direction (expand/contract) to see what the memory overhead, and gc cpu overhead will be, until we find an acceptable change in heap size */
 	while (!foundAcceptableHeapSizeChange) {
 
 		if (hybridOverheadTooHigh) {
 			/* We are trying to expand - but the potential expansion amount is too high*/
-			if ((reccomendedHeapSize + suggestedChange) > maxHeapSizeChange) {
+			if ((recommendedHeapSize + suggestedChange) > maxHeapSizeChange) {
 				break;
 			}
 		} else {
 			/* Don't contract so much as to exhaust free tenure */
-			if ((suggestedChange * -1) >= (IDATA)envVLHGC->_heapSizingData.freeTenure) {
+			if ((suggestedChange * -1) >= (intptr_t)envVLHGC->_heapSizingData.freeTenure) {
 				break;
 			}
 		}
@@ -1430,9 +1429,9 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 
 		if ((potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold) && (potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold)) {
 			/* The heap size we tested will give us an acceptable amount of free space, and better gc cpu % */
-			reccomendedHeapSize += suggestedChange;
+			recommendedHeapSize += suggestedChange;
 			foundAcceptableHeapSizeChange = true;
-			Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_1(env->getLanguageVMThread(), reccomendedHeapSize, potentialHybridOverhead);
+			Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_1(env->getLanguageVMThread(), recommendedHeapSize, potentialHybridOverhead);
 		} else {
 			/* The heap size we tried was not satisfactory. Keep searching */
 			suggestedChange += heapSizeChangeGranularity;
@@ -1475,15 +1474,15 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* Since percentDiff is 0 - 100, make sure to convert it to 0-1 percentage */
 		double heapSizePercentChange = (1.0 + ((double)sizeChangeFactor * (percentDiff / 100 )));
 		Trc_MM_MemorySubSpaceTarok_getHeapSizeWithinBounds_2(env->getLanguageVMThread(), heapSizePercentChange);
-		reccomendedHeapSize = (uintptr_t)(heapSizePercentChange * reccomendedHeapSize);
+		recommendedHeapSize = (uintptr_t)(heapSizePercentChange * recommendedHeapSize);
 	}
 
-	return reccomendedHeapSize;
+	return recommendedHeapSize;
 }
 
 
 double 
-MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDATA heapSizeChange)
+MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, intptr_t heapSizeChange)
 {
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
@@ -1511,7 +1510,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, IDA
 				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 				uintptr_t currentFreeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
 				uintptr_t potentialFreeTenure = currentFreeTenure + heapSizeChange;
-				if (heapSizeChange <= (-1 * (IDATA)currentFreeTenure) ) {
+				if (heapSizeChange <= (-1 * (intptr_t)currentFreeTenure) ) {
 					/* If we try to shrink too much, too fast, tenure will be way too small, causing lots of GC work */
 					potentialFreeTenure = 1;
 				}

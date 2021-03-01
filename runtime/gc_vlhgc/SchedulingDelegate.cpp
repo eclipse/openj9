@@ -284,7 +284,7 @@ MM_SchedulingDelegate::calculatePartialGarbageCollectOverhead(MM_EnvironmentVLHG
 	}
 	
 	double recentOverhead = (double)(_historicalPartialGCTime * 1000)/_averagePgcInterval;
-	_partialGcOverhead = (double)MM_Math::weightedAverage((float)_partialGcOverhead, (float)recentOverhead, 0.5);
+	_partialGcOverhead = MM_Math::weightedAverage(_partialGcOverhead, recentOverhead, 0.5);
 	
 	Trc_MM_SchedulingDelegate_calculatePartialGarbageCollectOverhead(env->getLanguageVMThread(), _partialGcOverhead, _averagePgcInterval/1000, _historicalPartialGCTime);
 }
@@ -1310,16 +1310,16 @@ MM_SchedulingDelegate::moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, doubl
 		return;
 	}
 
-	uintptr_t reccomendedEdenSizeBytes = calculateRecommendedEdenSize(env);
+	uintptr_t recommendedEdenSizeBytes = calculateRecommendedEdenSize(env);
 
 	uintptr_t currentIdealEdenBytes = getIdealEdenSizeInBytes(env);
 	uintptr_t currentIdealEdenRegions = _idealEdenRegionCount;
 
 	/* 
-	 * The closer edenChangeSpeed is to 1, the larger the move towards reccomendedEdenSizeBytes will be. 
-	 * 1 implies that eden should move all the way towards reccomendedEdenSizeBytes.
+	 * The closer edenChangeSpeed is to 1, the larger the move towards recommendedEdenSizeBytes will be. 
+	 * 1 implies that eden should move all the way towards recommendedEdenSizeBytes.
 	 */
-	intptr_t edenChange = (intptr_t)reccomendedEdenSizeBytes - currentIdealEdenBytes;
+	intptr_t edenChange = (intptr_t)recommendedEdenSizeBytes - currentIdealEdenBytes;
 	intptr_t targetEdenChange = (intptr_t)(edenChange * edenChangeSpeed);
 	uintptr_t targetEdenBytes = currentIdealEdenBytes + targetEdenChange;
 	uintptr_t targetEdenRegions = targetEdenBytes / _regionManager->getRegionSize();
