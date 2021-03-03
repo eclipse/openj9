@@ -1366,7 +1366,7 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
  		 */
 
 		intptr_t edenRegionChange = 0;
-		intptr_t edeChangeMagnitude = (intptr_t)ceil((0.1 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+		intptr_t edenChangeMagnitude = (intptr_t)ceil((0.1 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
 
 		double hybridEdenOverhead = calculateHybridEdenOverhead(env, _historicalPartialGCTime, _partialGcOverhead);
 		
@@ -1376,10 +1376,10 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 		 */
 		if (_extensions->dnssExpectedTimeRatioMinimum._valueSpecified > hybridEdenOverhead ) {
 			/* Shrink eden a bit */
-			edenRegionChange = edeChangeMagnitude * -1;
+			edenRegionChange = edenChangeMagnitude * -1;
 		} else if (_extensions->dnssExpectedTimeRatioMaximum._valueSpecified < hybridEdenOverhead) {
 			/* Expand eden a bit */
-			edenRegionChange = edeChangeMagnitude;
+			edenRegionChange = edenChangeMagnitude;
 		}
 
 		_edenSizeFactor += edenRegionChange;	
@@ -1390,9 +1390,9 @@ double
 MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr_t partialGcTimeMs) {
 	
 	/* Convert expectedTimeRatioMinimum/Maximum to 0-100 based for this formula */
-	uintptr_t xminpct = (uintptr_t)_extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
-	uintptr_t xmaxpct = (uintptr_t)_extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
-	uintptr_t xmaxt = _extensions->tarokTargetMaxPauseTime;
+	double xminpct = _extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
+	double xmaxpct = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
+	double xmaxt = (double)_extensions->tarokTargetMaxPauseTime;
 
 	double overhead;
 
@@ -1402,7 +1402,7 @@ MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr
 		 * So the overhead logic needs to map a low avg pgc time, to a low overhead value (aka, a "better"/more desirable value)
 		 * Ex 20ms -> 5% (good/desirable), 1000ms -> 80% (bad/undesirable/eden should probably shrink)
 		 */
-		double midpointPct = ((double)xmaxpct + (double)xminpct)/2.0;
+		double midpointPct = (xmaxpct + xminpct)/2.0;
 		if (partialGcTimeMs <= xmaxt) {
 			/* Once the pgc time is at, or below the max pgc time, there is no "benefit" from shrinking it further, since we are already satisfying tarokTargetMaxPauseTime */
 			overhead = midpointPct;
@@ -1412,7 +1412,7 @@ MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr
 			 * If pgc time is only slightly above tarokTargetMaxPauseTime, then there is only a very small overhead penalty, 
 			 * wheras being 2x higher than the target pause time leads to a significantly bigger penalty  
 			 */
-			double overheadCurve = pow(1.03, ((double)partialGcTimeMs - (double)xmaxt)) + midpointPct - 1;
+			double overheadCurve = pow(1.03, ((double)partialGcTimeMs - xmaxt)) + midpointPct - 1;
 			overhead = OMR_MIN(100.0, overheadCurve);
 		}
 		
@@ -1423,9 +1423,11 @@ MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr
 		 * If partialGcTimeMs is less than half of xmaxt, eden can expand without any fear of getting close to xmaxt - the mapped cpu overhead here is > xmaxpct (suggesting eden expansion)
 		 * Ex: 20ms -> 12% (suggest expansion), 2000ms -> 0.00% (suggest contraction)
 		 */
-		double slope = ((double)xmaxpct - (double)xminpct) / (((double)xmaxt/2) - (double)xmaxt);
-		overhead = (slope * partialGcTimeMs) + ((2 * xmaxpct) - xminpct);
+		double slope = (xmaxpct - xminpct) / ((xmaxt/2) - xmaxt);
+		overhead = (slope * (double)partialGcTimeMs) + ((2.0 * xmaxpct) - xminpct);
 		overhead = OMR_MAX(overhead, 0.0);	
+		/*  Expanding simply because pgc time is very small is not a good idea, so return xmaxpct, so that if the pgc cpu overhead wants to expand, only then eden expands */
+		overhead = OMR_MIN(overhead, xmaxpct);
 	}
 
 	return overhead;
