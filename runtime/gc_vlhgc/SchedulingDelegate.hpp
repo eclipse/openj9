@@ -162,7 +162,7 @@ private:
 	 * Aim to find the eden size with the best blend of gc overhead (% of time gc is active relative to mutators), and pgc average time
 	 * @return The recommended eden size (in bytes) given the current heap sizing (eden, tenure, etc), and PGC and GMP data.
 	 */ 
-	uintptr_t calculateRecommendedEdenSize(MM_EnvironmentVLHGC *env);
+	uintptr_t calculateRecommendedEdenSizeForExpandedHeap(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * @return The predicted overhead (% of time gc is active relative to mutators) if eden changes by 'edenChange' bytes
@@ -276,14 +276,15 @@ private:
 	void calculateEdenSize(MM_EnvironmentVLHGC *env);
 
 	/**
-	 * Compute what the ideal eden size should be, and set _edenSizeFactor accordingly
+	 * Compute what the ideal eden size should be, and return by how many regions eden should change
 	 * @param env[in] the main GC thread
 	 * @param edenChangeSpeed How quickly eden should jump from current eden size to the ideal eden size. edenChangeSpeed must be between 0 and 1. 
+	 * @return by how many regions eden should change. Positive values mean eden should expand, while negative values means eden should shrink
 	 * 0.1 indicates that current eden size should move a little bit towards ideal eden size
 	 * 0.9 indicates that current eden size should move very aggresively towards ideal eden size
 	 * 0.5 indicates that current eden size should move halfway towards ideal eden size
 	 */
-	void moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, double edenChangeSpeed);
+	intptr_t moveTowardRecommendedEdenForExpandedHeap(MM_EnvironmentVLHGC *env, double edenChangeSpeed);
 
 	/**
 	 * Following a PGC, check how PGC overhead and PGC times are behaving, and modyfing _edenSizeFactor to increase/decrease eden size if needed

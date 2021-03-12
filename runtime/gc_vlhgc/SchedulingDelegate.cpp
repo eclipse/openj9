@@ -62,7 +62,7 @@ const double incrementalScanTimePerGMPHistoricWeight = 0.50;
 const double bytesScannedConcurrentlyPerGMPHistoricWeight = 0.50;
 const uintptr_t minimumPgcTime = 5;
 const uintptr_t minimumEdenRegions = 1;
-const uintptr_t consecutivePGCToChangeEden = 16; /* Keeping this as power of 2 allows bitwise operations to be used instead of modulus */
+const uintptr_t consecutivePGCToChangeEden = 16;
 
 MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapRegionManager *manager)
 	: MM_BaseNonVirtual()
@@ -640,7 +640,7 @@ MM_SchedulingDelegate::calculateEstimatedGlobalBytesToScan() const
 }
 
 uintptr_t
-MM_SchedulingDelegate::calculateRecommendedEdenSize(MM_EnvironmentVLHGC *env) 
+MM_SchedulingDelegate::calculateRecommendedEdenSizeForExpandedHeap(MM_EnvironmentVLHGC *env) 
 {
 
 	if (0 == _pgcCountSinceGMPEnd) {
@@ -1300,17 +1300,17 @@ MM_SchedulingDelegate::calculateEdenSize(MM_EnvironmentVLHGC *env)
 	Trc_MM_SchedulingDelegate_calculateEdenSize_Exit(env->getLanguageVMThread(), (_edenRegionCount * regionSize));
 }
 
-void
-MM_SchedulingDelegate::moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, double edenChangeSpeed) 
+intptr_t
+MM_SchedulingDelegate::moveTowardRecommendedEdenForExpandedHeap(MM_EnvironmentVLHGC *env, double edenChangeSpeed) 
 {
-	Assert_MM_true(edenChangeSpeed <= 1 && edenChangeSpeed >= 0);
+	Assert_MM_true((edenChangeSpeed <= 1) && (edenChangeSpeed >= 0));
 
 	if ((0 == _historicalPartialGCTime) || (0 == _averagePgcInterval)) {
 		/* Until we have collected any information about PGC time, we don't have the data we need to make informed decision about eden size  */
-		return;
+		return 0;
 	}
 
-	uintptr_t recommendedEdenSizeBytes = calculateRecommendedEdenSize(env);
+	uintptr_t recommendedEdenSizeBytes = calculateRecommendedEdenSizeForExpandedHeap(env);
 
 	uintptr_t currentIdealEdenBytes = getIdealEdenSizeInBytes(env);
 	uintptr_t currentIdealEdenRegions = _idealEdenRegionCount;
@@ -1324,7 +1324,7 @@ MM_SchedulingDelegate::moveTowardRecommendedEden(MM_EnvironmentVLHGC *env, doubl
 	uintptr_t targetEdenBytes = currentIdealEdenBytes + targetEdenChange;
 	uintptr_t targetEdenRegions = targetEdenBytes / _regionManager->getRegionSize();
 
-	_edenSizeFactor = (intptr_t)targetEdenRegions - currentIdealEdenRegions;
+	return (intptr_t)targetEdenRegions - (intptr_t)currentIdealEdenRegions;
 }
 
 void
@@ -1353,11 +1353,11 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 			 * Take a more aggreessive step towards ideal eden. 
 			 * At this point we have the most accuate information about liveness in the heap, so we make the most informed decision
 			 */
-			moveTowardRecommendedEden(env, 0.5);
+			_edenSizeFactor += moveTowardRecommendedEdenForExpandedHeap(env, 0.5);
 			resetPgcTimeStatistics(env);
-		} else if ((_pgcCountSinceGMPEnd & (consecutivePGCToChangeEden - 1)) == 0) {
+		} else if (0 == _pgcCountSinceGMPEnd % consecutivePGCToChangeEden) {
 			/* Every consecutivePGCToChangeEden number of pgc's, re-evaluate eden size, and move towards it */
-			moveTowardRecommendedEden(env, 0.25);
+			_edenSizeFactor += moveTowardRecommendedEdenForExpandedHeap(env, 0.25);
 		}
 	} else if (0 == _pgcCountSinceGMPEnd % 3) {
 		/*

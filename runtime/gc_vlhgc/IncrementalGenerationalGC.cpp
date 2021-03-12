@@ -1976,7 +1976,8 @@ MM_IncrementalGenerationalGC::preConcurrentInitializeStatsAndReport(MM_Environme
 	stats->_cycleID = _persistentGlobalMarkPhaseState._verboseContextID;
 	stats->_scanTargetInBytes = _globalMarkPhaseIncrementBytesStillToScan;
 	env->_cycleState = &_persistentGlobalMarkPhaseState;
-	static_cast<MM_CycleStateVLHGC*>(env->_cycleState)->_vlhgcIncrementStats._markStats._startTime = j9time_hires_clock();
+	U_64 markStartTime = j9time_hires_clock();
+	static_cast<MM_CycleStateVLHGC*>(env->_cycleState)->_vlhgcIncrementStats._markStats._startTime = markStartTime;
 
 	/* Get an estimate of total process time when concurrent mark started. This is used to determine how much GMP costs*/
 	omrthread_process_time_t processStart;
@@ -1987,7 +1988,7 @@ MM_IncrementalGenerationalGC::preConcurrentInitializeStatsAndReport(MM_Environme
 	TRIGGER_J9HOOK_MM_PRIVATE_CONCURRENT_PHASE_START(
 			_extensions->privateHookInterface,
 			env->getOmrVMThread(),
-			j9time_hires_clock(),
+			markStartTime,
 			J9HOOK_MM_PRIVATE_CONCURRENT_PHASE_START,
 			stats);
 }
@@ -2067,8 +2068,8 @@ MM_IncrementalGenerationalGC::calculateConcurrentMarkWorkTime(MM_EnvironmentBase
 		U_64 concurrentGCWorkTime = markStats._concurrentGCThreadsEndTimeSum - markStats._concurrentGCThreadsStartTimeSum;
 		concurrentGCRatio = (double)concurrentGCWorkTime/concurrentElapsedTime;
 
-		/* If there was a clock error, concurrentGCWorkTime might be too high or negative. Make sure ratio is between 0.1 and 0.8 */
-		concurrentGCRatio = OMR_MIN(concurrentGCRatio, 0.8);
+		/* If there was a clock error, concurrentGCWorkTime might be too high or negative. Make sure ratio is between 0.1 and 0.9 */
+		concurrentGCRatio = OMR_MIN(concurrentGCRatio, 0.9);
 		concurrentGCRatio = OMR_MAX(concurrentGCRatio, 0.1);
 	} 
 
