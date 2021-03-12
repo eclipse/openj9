@@ -984,7 +984,7 @@ MM_SchedulingDelegate::getDefragmentEmptinessThreshold(MM_EnvironmentVLHGC *env)
 void
 MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env) 
 {	
-	/* Determine how large tenure is*/
+	/* Determine how much space needs to be reserved for eden + survivor space */
 	uintptr_t regionSize = _regionManager->getRegionSize();
 	uintptr_t survivorSize = (uintptr_t)(regionSize * _averageSurvivorSetRegionCount);
 	uintptr_t reservedFreeMemory =  getCurrentEdenSizeInBytes(env) + survivorSize;

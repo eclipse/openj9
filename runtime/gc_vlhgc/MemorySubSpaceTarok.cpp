@@ -1497,7 +1497,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 		uintptr_t pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
 
 		if ((0 == pgcCount) && (0 == _lastObservedGcPercentage)) {
-			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold */
+			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold. This makes it slightly easier to expand the heap */
 			_lastObservedGcPercentage = (double)_extensions->heapExpansionGCTimeThreshold;
 
 		} else {
@@ -1509,10 +1509,12 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 				 */
 				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 				uintptr_t currentFreeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
-				uintptr_t potentialFreeTenure = currentFreeTenure + heapSizeChange;
+				uintptr_t potentialFreeTenure = 0;
 				if (heapSizeChange <= (-1 * (intptr_t)currentFreeTenure) ) {
 					/* If we try to shrink too much, too fast, tenure will be way too small, causing lots of GC work */
 					potentialFreeTenure = 1;
+				} else {
+					potentialFreeTenure = currentFreeTenure + heapSizeChange;
 				}
 				pgcCount = (uintptr_t)(((double)potentialFreeTenure / currentFreeTenure) * pgcCount);
 			}
@@ -1530,10 +1532,10 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 		 * The values below do not change if heapSizeChange != 0, since global GC is proportional to live data in heap, rather than heap size. 
 		 * This means changing the heap size will not change the gc% by much
 		 */
-		if(NULL != _collector) {		
+		if (NULL != _collector) {		
 			_lastObservedGcPercentage = (double)_collector->getGCTimePercentage(env);	
 		} else {	
-			_lastObservedGcPercentage= (double)_extensions->getGlobalCollector()->getGCTimePercentage(env);	
+			_lastObservedGcPercentage = (double)_extensions->getGlobalCollector()->getGCTimePercentage(env);	
 		}
 	}	
 
