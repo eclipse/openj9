@@ -945,7 +945,13 @@ MM_IncrementalGenerationalGC::partialGarbageCollectPreWork(MM_EnvironmentVLHGC *
 	if (_schedulingDelegate.isGlobalSweepRequired()) {
 		Assert_MM_true(NULL == env->_cycleState->_externalCycleState);
 
+		PORT_ACCESS_FROM_ENVIRONMENT(env);
+
 		_reclaimDelegate.runGlobalSweepBeforePGC(env, allocDescription, env->_cycleState->_activeSubSpace, env->_cycleState->_gcCode);
+
+		U_64 sweepTimeStart = static_cast<MM_CycleStateVLHGC*>(env->_cycleState)->_vlhgcIncrementStats._sweepStats._startTime;
+		U_64 sweepTimeEnd = static_cast<MM_CycleStateVLHGC*>(env->_cycleState)->_vlhgcIncrementStats._sweepStats._endTime;
+		U_64 globalSweepTimeUs = j9time_hires_delta(sweepTimeStart, sweepTimeEnd, J9PORT_TIME_DELTA_IN_MICROSECONDS);
 
 		/* TODO: lpnguyen make another statisticsDelegate or something that both schedulingDelegate and reclaimDelegate can see
 		 * so that we can avoid this kind of stats-passing mess.
@@ -957,6 +963,7 @@ MM_IncrementalGenerationalGC::partialGarbageCollectPreWork(MM_EnvironmentVLHGC *
 
 		double optimalEmptinessRegionThreshold = _reclaimDelegate.calculateOptimalEmptinessRegionThreshold(env, regionConsumptionRate, avgSurvivorRegions, avgCopyForwardRate, scanTimeCostPerGMP);
 		_schedulingDelegate.setAutomaticDefragmentEmptinessThreshold(optimalEmptinessRegionThreshold);
+		_schedulingDelegate.setGlobalSweepTime(globalSweepTimeUs);
 	}
 
 	/* Determine if there are enough regions available to attempt a copy-forward collection.
