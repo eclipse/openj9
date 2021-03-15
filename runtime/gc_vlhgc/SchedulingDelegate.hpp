@@ -159,10 +159,10 @@ private:
 	double calculateEstimatedGlobalBytesToScan() const;
 
 	/**
-	 * Aim to find the eden size with the best blend of gc overhead (% of time gc is active relative to mutators), and pgc average time
-	 * @return The recommended eden size (in bytes) given the current heap sizing (eden, tenure, etc), and PGC and GMP data.
+	 * Aim to find the change in eden size with the best blend of gc overhead (% of time gc is active relative to mutators), and pgc average time
+	 * @return The recommended change in eden size (in bytes) given the current heap sizing (eden, tenure, etc), and PGC and GMP data.
 	 */ 
-	uintptr_t calculateRecommendedEdenSizeForExpandedHeap(MM_EnvironmentVLHGC *env);
+	intptr_t calculateRecommendedEdenChangeForExpandedHeap(MM_EnvironmentVLHGC *env);
 
 	/**
 	 * @return The predicted overhead (% of time gc is active relative to mutators) if eden changes by 'edenChange' bytes
@@ -297,20 +297,20 @@ private:
 	 * Maps a pgc time, to a corresponding GC overhead (as a % of time being active). This is used for calculating hybrid eden overhead.
 	 * Depending on if the heap is fully expanded (ie, heap size >= Xsoftmx), the returned overhead will take a slightly different meaning
 	 * @param env[in] the main GC thread
-	 * @param partialGcTimeMs the pgc time in Ms that needs to be mapped to an overhead, measured in ms
+	 * @param pgcPauseTimeMs the pgc pause time in Ms that needs to be mapped to a cpu overhead
 	 * @return PGC overhead corresponding to pgc time, as a % between 0 and 100
 	 */
-	double mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr_t partialGcTimeMs);
+	double mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs);
 
 	/**
 	 * Blends a pgc average time, and a GC overhead, and returns the hybrid overhead of the 2 values.
 	 * Note that if heap is fully expanded (current heap size > softmx/mx), the returned values mean slightly different things
 	 * @param env[in] the main GC thread
-	 * @param partialGcTimeMs the pgc time in Ms that needs to be mapped to an overhead, measured in ms
+	 * @param pgcPauseTimeMs the pgc time in Ms that needs to be mapped to a cpu overhead
 	 * @param overhead The overhead we need to blend. Must be value between 0 and 1
 	 * @return Hybrid overhead for pgc avg time and pgc overhead, as a % between 0 and 1
 	 */ 
-	double calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t partialGcTimeMs, double overhead);
+	double calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, double overhead);
 
 	/**
 	 * Modify the _idealEdenRegionCount count based on _edenSizeFactor. If _edenSizeFactor is postive, we increase eden. 

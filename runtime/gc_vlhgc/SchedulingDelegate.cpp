@@ -639,8 +639,8 @@ MM_SchedulingDelegate::calculateEstimatedGlobalBytesToScan() const
 	return liveSetAdjustedForScannableBytesRatio;
 }
 
-uintptr_t
-MM_SchedulingDelegate::calculateRecommendedEdenSizeForExpandedHeap(MM_EnvironmentVLHGC *env) 
+intptr_t
+MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_EnvironmentVLHGC *env) 
 {
 
 	if (0 == _pgcCountSinceGMPEnd) {
@@ -717,10 +717,9 @@ MM_SchedulingDelegate::calculateRecommendedEdenSizeForExpandedHeap(MM_Environmen
 		} 
 	}
 
-	uintptr_t recommendedSize = currentIdealEdenSize + recommendedEdenChange;
-	Trc_MM_SchedulingDelegate_calculateRecommendedEdenSize(env->getLanguageVMThread(), freeTenure, _totalGMPWorkTimeUs / 1000, avgPgcTimeUs, avgPgcIntervalUs, _edenSurvivalRateCopyForward, recommendedSize, bestOverheadPrediction);
+	Trc_MM_SchedulingDelegate_calculateRecommendedEdenChangeForExpandedHeap(env->getLanguageVMThread(), freeTenure, _totalGMPWorkTimeUs / 1000, avgPgcTimeUs, avgPgcIntervalUs, _edenSurvivalRateCopyForward, currentIdealEdenSize + recommendedEdenChange, bestOverheadPrediction);
 
-	return recommendedSize;
+	return recommendedEdenChange;
 }
 
 double 
@@ -1310,16 +1309,14 @@ MM_SchedulingDelegate::moveTowardRecommendedEdenForExpandedHeap(MM_EnvironmentVL
 		return 0;
 	}
 
-	uintptr_t recommendedEdenSizeBytes = calculateRecommendedEdenSizeForExpandedHeap(env);
-
 	uintptr_t currentIdealEdenBytes = getIdealEdenSizeInBytes(env);
 	uintptr_t currentIdealEdenRegions = _idealEdenRegionCount;
 
 	/* 
-	 * The closer edenChangeSpeed is to 1, the larger the move towards recommendedEdenSizeBytes will be. 
-	 * 1 implies that eden should move all the way towards recommendedEdenSizeBytes.
+	 * The closer edenChangeSpeed is to 1, the larger the move towards edenChange will be. 
+	 * 1 implies that eden should move all the way towards edenChange.
 	 */
-	intptr_t edenChange = (intptr_t)recommendedEdenSizeBytes - currentIdealEdenBytes;
+	intptr_t edenChange = calculateRecommendedEdenChangeForExpandedHeap(env);
 	intptr_t targetEdenChange = (intptr_t)(edenChange * edenChangeSpeed);
 	uintptr_t targetEdenBytes = currentIdealEdenBytes + targetEdenChange;
 	uintptr_t targetEdenRegions = targetEdenBytes / _regionManager->getRegionSize();
@@ -1387,14 +1384,14 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 }
 
 double 
-MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr_t partialGcTimeMs) {
+MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs) {
 	
 	/* Convert expectedTimeRatioMinimum/Maximum to 0-100 based for this formula */
 	double xminpct = _extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
 	double xmaxpct = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
 	double xmaxt = (double)_extensions->tarokTargetMaxPauseTime;
 
-	double overhead;
+	double overhead = 0.0;
 
 	if (heapIsFullyExpanded(env)) {
 		/* 
@@ -1403,30 +1400,33 @@ MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr
 		 * Ex 20ms -> 5% (good/desirable), 1000ms -> 80% (bad/undesirable/eden should probably shrink)
 		 */
 		double midpointPct = (xmaxpct + xminpct)/2.0;
-		if (partialGcTimeMs <= xmaxt) {
+		if (pgcPauseTimeMs <= xmaxt) {
 			/* Once the pgc time is at, or below the max pgc time, there is no "benefit" from shrinking it further, since we are already satisfying tarokTargetMaxPauseTime */
 			overhead = midpointPct;
 		} else {
 			/* 
 			 * If pgc time is above the max pgc time, map high PGC time values as very very high overhead, in efforts to bring the PGC time down to tarokTargetMaxPauseTime
 			 * If pgc time is only slightly above tarokTargetMaxPauseTime, then there is only a very small overhead penalty, 
-			 * wheras being 2x higher than the target pause time leads to a significantly bigger penalty  
+			 * wheras being 2x higher than the target pause time leads to a significantly bigger penalty.
+			 * 
+			 * Note: If pgcPauseTimeMs = 2 x xmaxt, the mapped cpu overhead will be the same, regardless of what xmaxt is.
 			 */
-			double overheadCurve = pow(1.03, ((double)partialGcTimeMs - xmaxt)) + midpointPct - 1;
+			double overheadCurve = pow((double)pgcPauseTimeMs/ xmaxt, 3) + midpointPct - 1;
 			overhead = OMR_MIN(100.0, overheadCurve);
 		}
 		
 	} else {
 		/* 
 		 * Eden sizing logic is trying to keep hybrid overhead between xminpct and xmaxpct, while trying to respect xmaxt. 
-		 * In this situation, when pgc times are very high (above xmaxt), the overhead score needs to return a low number, suggesting contraction.
-		 * If partialGcTimeMs is less than half of xmaxt, eden can expand without any fear of getting close to xmaxt - the mapped cpu overhead here is > xmaxpct (suggesting eden expansion)
-		 * Ex: 20ms -> 12% (suggest expansion), 2000ms -> 0.00% (suggest contraction)
+		 * The function/model used below follows the following high level concepts:
+		 * - if pgcPauseTimeMs is greater than xmaxt, explicitly suggest contraction. ie, overhead = (<xminpct)
+		 * - if pgcPauseTimeMs is less than half of xmaxt, suggest neither explicit contraction nor explicit expansion, although later blended with CPU overhead it may implicitly result into a contraction/expansion. Value here = xmaxpct
+		 * - if (xmaxt/2) < pgcPauseTimeMs < xmaxt, the mapped overhead is somewhere between xmaxpct and xminpct. The closer pgcPauseTimeMs is to xmaxt, the closer the overhead will be to xminpct (which suggests contraction)
 		 */
 		double slope = (xmaxpct - xminpct) / ((xmaxt/2) - xmaxt);
-		overhead = (slope * (double)partialGcTimeMs) + ((2.0 * xmaxpct) - xminpct);
+		overhead = (slope * (double)pgcPauseTimeMs) + ((2.0 * xmaxpct) - xminpct);
 		overhead = OMR_MAX(overhead, 0.0);	
-		/*  Expanding simply because pgc time is very small is not a good idea, so return xmaxpct, so that if the pgc cpu overhead wants to expand, only then eden expands */
+		/* Expanding simply because pgc time is very small is not a good idea, so return xmaxpct, so that if the pgc cpu overhead wants to expand, only then eden expands */
 		overhead = OMR_MIN(overhead, xmaxpct);
 	}
 
@@ -1434,7 +1434,7 @@ MM_SchedulingDelegate::mapPgcTimeToPgcOverhead(MM_EnvironmentVLHGC *env, uintptr
 }
 
 double 
-MM_SchedulingDelegate::calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t partialGcTimeMs, double overhead)
+MM_SchedulingDelegate::calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, double overhead)
 {
 	/* 
 	 * When trying to size eden, there is a delicate balance between pgc overhead (here, overhead is cpu %, or % of time that pgc is active 
@@ -1447,9 +1447,9 @@ MM_SchedulingDelegate::calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uin
 	 * it wants to contract/expand, based on how much it will change the overhead and pgc times.
 	 */
 	double actualPGCOverheadWeight = 0.5;
-	assert(overhead >= 0.0 && overhead <= 1.0);
-	double pgcTimeOverhead = mapPgcTimeToPgcOverhead(env, partialGcTimeMs);
-	double hybridEdenOverheadHundredBased = (actualPGCOverheadWeight * (overhead * 100)) + ((1- actualPGCOverheadWeight) * pgcTimeOverhead);
+	Assert_MM_true((overhead >= 0.0) && (overhead <= 1.0));
+	double pgcTimeOverhead = mapPgcPauseOverheadToPgcCPUOverhead(env, pgcPauseTimeMs);
+	double hybridEdenOverheadHundredBased = MM_Math::weightedAverage(overhead * 100, pgcTimeOverhead, actualPGCOverheadWeight);
 	return hybridEdenOverheadHundredBased / 100;	
 }
 
