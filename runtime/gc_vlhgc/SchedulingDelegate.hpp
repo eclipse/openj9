@@ -94,7 +94,7 @@ private:
 
 	uintptr_t _dynamicGlobalMarkIncrementTimeMillis;  /**< The dynamically calculated current time to be spent per GMP increment (subject to change over the course of the run) */
 
-	double _pgcTimeIncreasePerEdenRegionFactor; /**< Used to keep track of how much pgc time will increase as eden size increases */
+	double _pgcTimeIncreasePerEdenFactor; /**< Used to keep track of how much pgc time will increase as eden size increases */
 
 	intptr_t _edenSizeFactor; /**< Used to indicate how far eden should increase or decrease from current value. Positive values indicate max eden should be larger, while - values indicate max eden should shrink. Value corresponds to number of regions */
 	uintptr_t _pgcCountSinceGMPEnd; /**< Counts the number of PGC's from end of last GMP cycle, to the end of current(next) GMP cycle */
@@ -294,13 +294,20 @@ private:
 	void checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool globalSweepHappened);
 
 	/**
+	 * Calculates how much eden size should change when heap is not fully expanded, based off of pgc time, and pgc cpu overhead
+	 * @return by how many regions eden should change
+	 */
+	intptr_t calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env);
+
+	/**
 	 * Maps a pgc time, to a corresponding GC overhead (as a % of time being active). This is used for calculating hybrid eden overhead.
 	 * Depending on if the heap is fully expanded (ie, heap size >= Xsoftmx), the returned overhead will take a slightly different meaning
 	 * @param env[in] the main GC thread
 	 * @param pgcPauseTimeMs the pgc pause time in Ms that needs to be mapped to a cpu overhead
+	 * @param heapIsFullyExpanded set to true will use the mapping for when heap is fully expanded, which differs from the false case.
 	 * @return PGC overhead corresponding to pgc time, as a % between 0 and 100
 	 */
-	double mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs);
+	double mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, bool heapIsFullyExpanded);
 
 	/**
 	 * Blends a pgc average time, and a GC overhead, and returns the hybrid overhead of the 2 values.
@@ -308,9 +315,10 @@ private:
 	 * @param env[in] the main GC thread
 	 * @param pgcPauseTimeMs the pgc time in Ms that needs to be mapped to a cpu overhead
 	 * @param overhead The overhead we need to blend. Must be value between 0 and 1
+	 * @param heapIsFullyExpanded set to true will use the pgc time mapping for when heap is fully expanded, which differs from the false case.
 	 * @return Hybrid overhead for pgc avg time and pgc overhead, as a % between 0 and 1
 	 */ 
-	double calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, double overhead);
+	double calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, double overhead, bool heapIsFullyExpanded);
 
 	/**
 	 * Modify the _idealEdenRegionCount count based on _edenSizeFactor. If _edenSizeFactor is postive, we increase eden. 
