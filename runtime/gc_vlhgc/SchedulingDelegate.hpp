@@ -81,6 +81,8 @@ private:
 
 	double _maxEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the maximum percentage of the heap that can be taken by eden */
 	double _minEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the minimum percentage of the heap that can be taken by eden */
+	uintptr_t _maxEdenRegionsXmnx; /**< The maximum eden regions as specified by -Xmn or -Xmnx command line options. This will take precedence over _maxEdenPercent, if it is not set to 0 */
+	uintptr_t _minEdenRegionsXmns; /**< The minimum eden regions as specified by -Xmn or -Xmns command line options. This will take precedence over _minEdenPercent, if it is not set to 0 */
 
 	uint64_t _partialGcStartTime;  /**< Start time of the in progress Partial GC in hi-resolution format (recorded to track total time spent in Partial GC) */
 	double _partialGcOverhead; /**< Used to keep track of relative Partial GC overhead. Is calculated by dividing total time spent in a single PGC phase, by the time interval since the end of the previous PGC */
@@ -395,6 +397,13 @@ private:
 protected:
 	
 public:
+	/**
+	 * Initialize the receiver.
+	 * @param env[in] The thread initializing the collector
+	 * @return Whether or not the initialization succeeded
+	 */
+	bool initialize(MM_EnvironmentVLHGC *env);
+
 	uintptr_t initializeKickoffHeadroom(MM_EnvironmentVLHGC *env);
 
 	/**

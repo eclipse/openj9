@@ -176,6 +176,10 @@ MM_IncrementalGenerationalGC::initialize(MM_EnvironmentVLHGC *env)
  		goto error_no_memory;
  	}
 
+	if (!_schedulingDelegate.initialize(env)) {
+		goto error_no_memory;
+	}
+
  	if(!_collectionSetDelegate.initialize(env)) {
  		goto error_no_memory;
  	}

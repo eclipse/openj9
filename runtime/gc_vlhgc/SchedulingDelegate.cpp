@@ -104,6 +104,8 @@ MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapR
 	, _estimatedFreeTenure(0)
 	, _maxEdenPercent(0.75)
 	, _minEdenPercent(0.01)
+	, _maxEdenRegionsXmnx(0)
+	, _minEdenRegionsXmns(0)
 	, _partialGcStartTime(0)
 	, _partialGcOverhead(0.07)
 	, _historicalPartialGCTime(0)
@@ -123,7 +125,18 @@ MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapR
 	_typeId = __FUNCTION__;
 }
 
+bool
+MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
+{
+	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmns._wasSpecified) {
+		_minEdenRegionsXmns = _extensions->tarokIdealEdenMinimumBytes / _regionManager->getRegionSize();
+	}
 
+	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmnx._wasSpecified) {
+		_maxEdenRegionsXmnx = _extensions->tarokIdealEdenMaximumBytes / _regionManager->getRegionSize();
+	}
+	return true;
+}
 
 uintptr_t
 MM_SchedulingDelegate::getInitialTaxationThreshold(MM_EnvironmentVLHGC *env)
@@ -1361,8 +1374,7 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 	intptr_t heapNotFullyExpandedRecommendation = 0.0;
 	intptr_t heapFullyExpandedRecommendation = 0.0;
 
-	if ((0.0 == heapPercentExpandedAboveThreshold) && (0 == _pgcCountSinceGMPEnd % 3)) {
-		/* When heap is under heapFullyExpandedThreshold, consider heapNotFullyExpandedRecommendation on every third pgc so historical stats can settle */		
+	if (0.0 == heapPercentExpandedAboveThreshold) {
 		heapNotFullyExpandedRecommendation = calculateEdenChangeHeapNotFullyExpanded(env);
 	} else if (0.0 < heapPercentExpandedAboveThreshold) {
 		/** 
@@ -1396,7 +1408,7 @@ intptr_t
 MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env)
 {
 	intptr_t edenRegionChange = 0;
-	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.1 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.03 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
 
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, _historicalPartialGCTime, _partialGcOverhead, false);
 	 
@@ -1497,16 +1509,9 @@ MM_SchedulingDelegate::adjustIdealEdenRegionCount(MM_EnvironmentVLHGC *env)
 		return;
 	}
 
-	uintptr_t maxEdenCount = (uintptr_t)(_numberOfHeapRegions * _maxEdenPercent);
-	uintptr_t minEdenCount = (uintptr_t)(_numberOfHeapRegions * _minEdenPercent);
-
 	/* If there are any user specific eden sizing options, these take precendence over _maxEdenPercent and  _minEdenPercent */
-	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmns._wasSpecified) {
-		minEdenCount = _extensions->tarokIdealEdenMinimumBytes / _regionManager->getRegionSize();
-	}
-	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmnx._wasSpecified) {
-		maxEdenCount = _extensions->tarokIdealEdenMaximumBytes / _regionManager->getRegionSize();
-	}
+	uintptr_t maxEdenCount = (0 == _maxEdenRegionsXmnx) ? (uintptr_t)(_numberOfHeapRegions * _maxEdenPercent) : _maxEdenRegionsXmnx;
+	uintptr_t minEdenCount = (0 == _minEdenRegionsXmns) ? (uintptr_t)(_numberOfHeapRegions * _minEdenPercent) : _minEdenRegionsXmns;
 
 	/* Do not allow eden to grow/shrink past the min/max eden count */
 	intptr_t possibleEdenRegionCount = (intptr_t)_idealEdenRegionCount + edenChange;
@@ -1610,8 +1615,7 @@ MM_SchedulingDelegate::heapReconfigured(MM_EnvironmentVLHGC *env)
 		/* we are fully expanded or mx == ms so just return the maximum ideal eden */
 		edenIdealBytes = edenMaximumBytes;
 	} else {
-		/* interpolate between the maximum and minimum */
-		/* This logic follows the formula given in JAZZ 39694
+		/* interpolate between the maximum and minimum
 		 * for:  -XmsA -XmxB -XmnsC -XmnxD, "current heap size" W, "current Eden size" Z:
 		 * Z := C + ((W-A)/(B-A))(D-C)
 		 * 
