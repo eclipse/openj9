@@ -79,10 +79,8 @@ private:
 	uintptr_t _historicBytesScannedConcurrentlyPerGMP; /**< Historic average amount of bytes we scan concurrently per GMP cycle */
 	uintptr_t _estimatedFreeTenure; /**< The amount of free memory we estimate in the total heap - includes some headroom for GMP kickoff */
 
-	double _maxEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the maximum percentage of the heap that can be taken by eden */
-	double _minEdenPercent; /**< When GMP and PGC overheads are driving eden expansion, this is the minimum percentage of the heap that can be taken by eden */
-	uintptr_t _maxEdenRegionsXmnx; /**< The maximum eden regions as specified by -Xmn or -Xmnx command line options. This will take precedence over _maxEdenPercent, if it is not set to 0 */
-	uintptr_t _minEdenRegionsXmns; /**< The minimum eden regions as specified by -Xmn or -Xmns command line options. This will take precedence over _minEdenPercent, if it is not set to 0 */
+	uintptr_t _maxEdenRegionCount; /**< The maximum size of eden, in regions */
+	uintptr_t _minEdenRegionCount; /**< The minimum size of eden, in regions */
 
 	uint64_t _partialGcStartTime;  /**< Start time of the in progress Partial GC in hi-resolution format (recorded to track total time spent in Partial GC) */
 	double _partialGcOverhead; /**< Used to keep track of relative Partial GC overhead. Is calculated by dividing total time spent in a single PGC phase, by the time interval since the end of the previous PGC */
