@@ -128,7 +128,7 @@ MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
 {
 	uintptr_t maxHeapSize = _extensions->memoryMax;
 
-	double minEdenPercent = 0.01;
+	double minEdenPercent = 0.05;
 	double maxEdenPercent = 0.75;
 
 	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmns._wasSpecified) {
@@ -715,6 +715,12 @@ MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_Environm
 	double currentCpuEdenOverhead = predictCpuOverheadForEdenSize(env, currentIdealEdenSize, recommendedEdenChange, freeTenure, avgPgcIntervalUs);
 	double currentEdenHybridOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, currentCpuEdenOverhead, true);
 	double bestOverheadPrediction = currentEdenHybridOverhead;
+	
+	/* 
+	 * In order to prevent very minor fluctuations in eden size, which don't result in significant performance improvements, 
+	 * apply a high pass filter - so that only large enough improvements result in eden changing size
+	 */
+	double hybridOverheadRequiredToChangeEden = currentEdenHybridOverhead * 0.95;
 
 	/* How large the hops (in bytes) between samples should be */
 	uintptr_t samplingGranularity = (uintptr_t)(maxEdenChange - minEdenChange) / numberOfSamples;
@@ -728,8 +734,8 @@ MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_Environm
 		double estimatedCpuOverhead = predictCpuOverheadForEdenSize(env, currentIdealEdenSize, edenChange, freeTenure, avgPgcIntervalUs);
 		double estimatedPGCAvgTime = predictPgcTime(env, currentIdealEdenSize, edenChange);
 		double estimatedHybridOverhead = calculateHybridEdenOverhead(env, (uintptr_t)estimatedPGCAvgTime / 1000, estimatedCpuOverhead, true);
-		
-		if (estimatedHybridOverhead < bestOverheadPrediction) {
+
+		if ((estimatedHybridOverhead < bestOverheadPrediction) && (estimatedHybridOverhead < hybridOverheadRequiredToChangeEden)) {
 			/* The hybrid between pgc pause time, and gc overhead (% time gc is active), is better than what was previously thought to be the best, save the eden size */
 			recommendedEdenChange = edenChange;
 			bestOverheadPrediction = estimatedHybridOverhead;
@@ -1410,7 +1416,7 @@ intptr_t
 MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env)
 {
 	intptr_t edenRegionChange = 0;
-	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.03 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.05 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
 
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, _partialGcOverhead, false);
 	 
@@ -1456,7 +1462,7 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 			 * 
 			 * Note: If pgcPauseTimeMs = 2 x xmaxt, the mapped cpu overhead will be the same, regardless of what xmaxt is.
 			 */
-			double overheadCurve = pow((double)pgcPauseTimeMs / xmaxt, 5.0) + midpointPct - 1;
+			double overheadCurve = pow((double)pgcPauseTimeMs / xmaxt, 6.0) + midpointPct - 1;
 			overhead = OMR_MIN(100.0, overheadCurve);
 		}
 		
@@ -1464,13 +1470,12 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 		/* 
 		 * Eden sizing logic is trying to keep hybrid overhead between xminpct and xmaxpct, while trying to respect xmaxt. 
 		 * The function/model used below follows the following high level concepts:
-		 * - if pgcPauseTimeMs is greater than xmaxt, explicitly suggest contraction. ie, overhead = (<xminpct)
+		 * - if pgcPauseTimeMs is greater than xmaxt, explicitly suggest contraction. ie, overhead = (<xminpct). Note: it is possible for overhead to be negative if pgcPauseTimeMs is far beyond pause target - this is okay.
 		 * - if pgcPauseTimeMs is less than half of xmaxt, suggest neither explicit contraction nor explicit expansion, although later blended with CPU overhead it may implicitly result into a contraction/expansion. Value here = xmaxpct
 		 * - if (xmaxt/2) < pgcPauseTimeMs < xmaxt, the mapped overhead is somewhere between xmaxpct and xminpct. The closer pgcPauseTimeMs is to xmaxt, the closer the overhead will be to xminpct (which suggests contraction)
 		 */
 		double slope = (xmaxpct - xminpct) / ((xmaxt/2) - xmaxt);
 		overhead = (slope * (double)pgcPauseTimeMs) + ((2.0 * xmaxpct) - xminpct);
-		overhead = OMR_MAX(overhead, 0.0);	
 		/* Expanding simply because pgc time is very small is not a good idea, so return xmaxpct, so that if the pgc cpu overhead wants to expand, only then eden expands */
 		overhead = OMR_MIN(overhead, xmaxpct);
 	}

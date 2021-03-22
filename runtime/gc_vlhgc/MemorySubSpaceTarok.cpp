@@ -1405,7 +1405,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	bool foundAcceptableHeapSizeChange = false;
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
 	intptr_t heapSizeChangeGranularity = hybridOverheadTooHigh ? (intptr_t)_heapRegionManager->getRegionSize() : (-1 * (intptr_t)_heapRegionManager->getRegionSize());
-	uintptr_t maxHeapSizeChange = 2 * recommendedHeapSize;
+	uintptr_t maxHeapSizeChange = (uintptr_t)(1.25 * (double)recommendedHeapSize);
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
 	intptr_t suggestedChange = heapSizeChangeGranularity;
