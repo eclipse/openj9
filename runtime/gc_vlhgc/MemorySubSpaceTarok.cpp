@@ -994,15 +994,15 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 	double hybridHeapScore = calculateCurrentHybridHeapOverhead(env);
 	
 	/* Based on the hybrid overhead of gc cpu, and free memory, decide if heap should expand or contract */
-	if (hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold) {
+	if (hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) {
 		/* Try to expand the heap */
 		sizeChange = (intptr_t)calculateExpansionSize(env, allocDescription, _systemGC);
-	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold) {
+	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) {
 		/* Try to contract the heap */
 		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
 	}
 
-	if ((0 == sizeChange) && ((double)_extensions->heapContractionGCTimeThreshold <= hybridHeapScore)) {
+	if ((0 == sizeChange) && ((double)_extensions->heapContractionGCTimeThreshold._valueSpecified <= hybridHeapScore)) {
 		/* 
 		 * There are certain edge cases where the heap should shrink in order to respect Xsoftmx, that will not be picked up if hybrid heap score is ABOVE heapContractionGCTimeThreshold 
 		 * We need to inform the calculateContractionSize() that it should not try to get the hybrid heap score within acceptable bounds, but rather, should 
@@ -1053,8 +1053,8 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 
 	uintptr_t xminf = _extensions->heapFreeMinimumRatioMultiplier;
 	uintptr_t xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
-	uintptr_t xmint = _extensions->heapContractionGCTimeThreshold;
-	uintptr_t xmaxt = _extensions->heapExpansionGCTimeThreshold;
+	uintptr_t xmint = _extensions->heapContractionGCTimeThreshold._valueSpecified;
+	uintptr_t xmaxt = _extensions->heapExpansionGCTimeThreshold._valueSpecified;
 
 	double freeSpaceToGcPctRatio = (double)(xmaxt - xmint) / (xmaxf - xminf);
 
@@ -1401,7 +1401,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	 * In order to decrease hybrid overhead, heap must expand. When the heap expands, gc cpu % will decrease, and free memory % will increase, resulting in a lower overhead.
 	 * In order to increase hybrid overhead, heap must contract. When heap contracts, gc cpu % will increase, and free memory % will decrease, resulting in a higher hybrid overhead.
 	 */
-	bool hybridOverheadTooHigh = currentHybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold;
+	bool hybridOverheadTooHigh = currentHybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified;
 	bool foundAcceptableHeapSizeChange = false;
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
 	intptr_t heapSizeChangeGranularity = hybridOverheadTooHigh ? (intptr_t)_heapRegionManager->getRegionSize() : (-1 * (intptr_t)_heapRegionManager->getRegionSize());
@@ -1427,7 +1427,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* Test what will happen to gc cpu % and free memory % if we expand/contract by heapSizeChange bytes */
 		double potentialHybridOverhead = calculateHybridHeapOverhead(env, suggestedChange);
 
-		if ((potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold) && (potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold)) {
+		if ((potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) && (potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold._valueSpecified)) {
 			/* The heap size we tested will give us an acceptable amount of free space, and better gc cpu % */
 			recommendedHeapSize += suggestedChange;
 			foundAcceptableHeapSizeChange = true;
@@ -1450,9 +1450,9 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* percentDiff is represented as percent between 0 - 100 */
 		double percentDiff = 0.0;
 
-		if (currentHybridHeapScore >= (double)_extensions->heapExpansionGCTimeThreshold) {
+		if (currentHybridHeapScore >= (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) {
 			/* Try to bring hybridHeapScore a little bit below _extensions->heapExpansionGCTimeThreshold */
-			percentDiff = currentHybridHeapScore - (double)_extensions->heapExpansionGCTimeThreshold;
+			percentDiff = currentHybridHeapScore - (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified;
 
 			/* Limit the percent difference to prevent any accidental big changes. 
 			 * This helps deal with cases with one GC that is too long for whatever reason, causing a massive, undesired increase in heap size 
@@ -1462,12 +1462,12 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 			/* Be a bit more aggressive with expansion than contraction.  */	
 			sizeChangeFactor = 2;	
 
-		} else if (currentHybridHeapScore <= (double)_extensions->heapContractionGCTimeThreshold) {
+		} else if (currentHybridHeapScore <= (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) {
 			/* Try to bring hybridHeapScore a little bit above _extensions->heapContractionGCTimeThreshold.
 			 * If this doesn't cause the hybrid heap score to increase enough so that it is within acceptable bounds, this path will be taken 
 			 * again later, and another small contraction will occur.
 			 */
-			percentDiff = currentHybridHeapScore - (double)_extensions->heapContractionGCTimeThreshold;
+			percentDiff = currentHybridHeapScore - (double)_extensions->heapContractionGCTimeThreshold._valueSpecified;
 			sizeChangeFactor = 1;
 		} 
 
@@ -1498,7 +1498,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 
 		if ((0 == pgcCount) && (0 == _lastObservedGcPercentage)) {
 			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold. This makes it slightly easier to expand the heap */
-			_lastObservedGcPercentage = (double)_extensions->heapExpansionGCTimeThreshold;
+			_lastObservedGcPercentage = (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified;
 
 		} else {
 

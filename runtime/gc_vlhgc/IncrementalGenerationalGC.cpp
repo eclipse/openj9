@@ -216,6 +216,17 @@ MM_IncrementalGenerationalGC::initialize(MM_EnvironmentVLHGC *env)
 	/* The Tarok policy always compacts since it can't handle dark matter in scan-only regions */
 	extensions->compactOnGlobalGC = true;
 
+	#define TAROK_DEFAULT_GC_EXPANSION_THRESHOLD 9
+	#define TAROK_DEFAULT_GC_CONTRACTION_THRESHOLD 3
+
+	if (!extensions->heapExpansionGCTimeThreshold._wasSpecified) {
+		extensions->heapExpansionGCTimeThreshold._valueSpecified = TAROK_DEFAULT_GC_EXPANSION_THRESHOLD;
+	}
+
+	if (!extensions->heapContractionGCTimeThreshold._wasSpecified) {
+		extensions->heapContractionGCTimeThreshold._valueSpecified = TAROK_DEFAULT_GC_CONTRACTION_THRESHOLD;
+	}
+
 	/**
 	 * Set maximum allocation age based on logical maximum age
 	 * except it has not been hard coded in command line

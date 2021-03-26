@@ -102,7 +102,7 @@ MM_EnvironmentVLHGC::initializeGCThread()
 {
 	Assert_MM_true(NULL == _rememberedSetCardBucketPool);
 	MM_GCExtensions *extensions = MM_GCExtensions::getExtensions(this);
-	UDATA threadPoolSize = extensions->getHeap()->getHeapRegionManager()->getTableRegionCount();
+	uintptr_t threadPoolSize = extensions->getHeap()->getHeapRegionManager()->getTableRegionCount();
 	/* Make this thread aware of its RSCL buckets for all regions */
 	_rememberedSetCardBucketPool = &extensions->rememberedSetCardBucketPool[getWorkerID() * threadPoolSize];
     /* Associate buckets with appropriate RSCL (each RSCL maintains a list of its own buckets) */

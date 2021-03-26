@@ -189,7 +189,7 @@ j9gc_initialize_parse_gc_colon(J9JavaVM *javaVM, char **scan_start)
 #if defined(J9VM_GC_VLHGC)
 		    /* Save soft pause target for balanced */
 			extensions->tarokTargetMaxPauseTime = beatMilli;
-#endif
+#endif /* J9VM_GC_VLHGC */
 
 		goto _exit;
 	}

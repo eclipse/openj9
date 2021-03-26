@@ -67,11 +67,11 @@ public:
 
 	MM_CopyForwardCompactGroup *_copyForwardCompactGroups;  /**< List of copy-forward data for each compact group for the given GC thread (only for GC threads during copy forward operations) */
 	
-	UDATA _previousConcurrentYieldCheckBytesScanned;	/**< The number of bytes scanned in the mark stats at the end of the previous shouldYieldFromTask check in concurrent mark */
+	uintptr_t _previousConcurrentYieldCheckBytesScanned;	/**< The number of bytes scanned in the mark stats at the end of the previous shouldYieldFromTask check in concurrent mark */
 
 	MM_CardBufferControlBlock *_rsclBufferControlBlockHead; /**< head of BufferControlBlock thread local pool list */
 	MM_CardBufferControlBlock *_rsclBufferControlBlockTail; /**< tail of BufferControlBlock thread local pool list */
-	IDATA _rsclBufferControlBlockCount;	/**< count of buffers in BufferControlBlock thread local pool list */
+	intptr_t _rsclBufferControlBlockCount;	/**< count of buffers in BufferControlBlock thread local pool list */
 	MM_RememberedSetCardBucket *_rememberedSetCardBucketPool; /**< GC thread local pool of RS Card Buckets for each Region (its Card List) */
 	MM_RememberedSetCardList *_lastOverflowedRsclWithReleasedBuffers; /**< in global list of overflowed RSCL, this is the last RSCL this thread visited */
 
@@ -82,15 +82,15 @@ public:
 
 	/* Statistics which are used in heap sizing logic. Contains information that the heap needs to know about for purposes of heap resizing */
 
-	UDATA _previousPgcPerGmpCount; /**< The number of PGC's that happened between the most recent GMP cycle, and the second most recent GMP cycle*/
+	uintptr_t _previousPgcPerGmpCount; /**< The number of PGC's that happened between the most recent GMP cycle, and the second most recent GMP cycle*/
 
 	struct MM_GcTimeHeapSizingData {
-		U_64 gmpTime;
-		U_64 avgPgcTimeUs;
-		U_64 avgPgcIntervalUs;
-		U_64 pgcCountSinceGMPEnd;
-		U_64 reservedSize;
-		U_64 freeTenure;
+		uint64_t gmpTime;
+		uint64_t avgPgcTimeUs;
+		uint64_t avgPgcIntervalUs;
+		uint64_t pgcCountSinceGMPEnd;
+		uint64_t reservedSize;
+		uint64_t freeTenure;
 
 		MM_GcTimeHeapSizingData() :
 			gmpTime(0),
@@ -140,8 +140,8 @@ public:
 	 *	If only had 2 PGC's happened before the last GMP, then GMP indeed has significant weight, and reading from _previousPgcPerGmpCount, will inform us of that	 
 	 *  @return A PGC count which is representative of what we will likely observe until the next GMP
 	 */ 
-	UDATA getRepresentativePgcPerGmpCount(){
-		return (UDATA)OMR_MAX(_previousPgcPerGmpCount, _heapSizingData.pgcCountSinceGMPEnd);
+	uintptr_t getRepresentativePgcPerGmpCount(){
+		return (uintptr_t)OMR_MAX(_previousPgcPerGmpCount, _heapSizingData.pgcCountSinceGMPEnd);
 	}
 
 protected:

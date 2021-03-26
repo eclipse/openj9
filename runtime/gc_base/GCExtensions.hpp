@@ -164,9 +164,6 @@ public:
 
 	MM_Wildcard* numaCommonThreadClassNamePatterns; /**< A linked list of thread class names which should be associated with the common context */
 
-#if defined(J9VM_GC_VLHGC)
-	UDATA tarokTargetMaxPauseTime; /**< An optional, user specified soft max pause time for PGC's in balanced GC*/
-#endif /* J9VM_GC_VLHGC */
 	struct {
 		MM_UserSpecifiedParameterUDATA _Xmn; /**< Initial value of -Xmn specified by the user */
 		MM_UserSpecifiedParameterUDATA _Xmns; /**< Initial value of -Xmns specified by the user */
@@ -322,9 +319,6 @@ public:
 		, unfinalizedObjectLists(NULL)
 		, objectListFragmentCount(0)
 		, numaCommonThreadClassNamePatterns(NULL)
-#if defined(J9VM_GC_VLHGC)
-        , tarokTargetMaxPauseTime(200)
-#endif /* J9VM_GC_VLHGC */
 		, stringDedupPolicy(J9_JIT_STRING_DEDUP_POLICY_UNDEFINED)
 		, _asyncCallbackKey(-1)
 		, _TLHAsyncCallbackKey(-1)
