@@ -128,7 +128,7 @@ MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
 {
 	uintptr_t maxHeapSize = _extensions->memoryMax;
 
-	double minEdenPercent = 0.05;
+	double minEdenPercent = 0.01;
 	double maxEdenPercent = 0.75;
 
 	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmns._wasSpecified) {
@@ -1391,7 +1391,6 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 		if (globalSweepHappened) {
 			heapFullyExpandedRecommendation = moveTowardRecommendedEdenForExpandedHeap(env, 0.5);
 			heapNotFullyExpandedRecommendation = calculateEdenChangeHeapNotFullyExpanded(env);
-			resetPgcTimeStatistics(env);
 		} else if (0 == _pgcCountSinceGMPEnd % consecutivePGCToChangeEden){
 			/** 
 	 		 * Every consecutivePGCToChangeEden number of PGC's, check to see if eden size should change. 
@@ -1400,6 +1399,10 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 			heapFullyExpandedRecommendation = moveTowardRecommendedEdenForExpandedHeap(env, 0.25);
 			heapNotFullyExpandedRecommendation = calculateEdenChangeHeapNotFullyExpanded(env);
 		}
+	}
+
+	if (globalSweepHappened) {
+		resetPgcTimeStatistics(env);
 	}
 
 	/** 
@@ -1477,8 +1480,11 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 		 */
 		double slope = (xmaxpct - xminpct) / ((0.95 * targetPauseTimeMs) - targetPauseTimeMs);
 		overhead = (slope * (double)pgcPauseTimeMs) + ((20.0 * xmaxpct) - (19.0 * xminpct));
-		/* Expanding simply because pgc time is very small is not a good idea, so return xmaxpct, so that if the pgc cpu overhead wants to expand, only then eden expands */
-		overhead = OMR_MIN(overhead, xmaxpct);
+		/* 
+		 * Expanding simply because pgc time is very small is not really beneficial. 
+		 * Instead, if the pgc pause time is still relatively far from target pause time, simply return _partialGcOverhead so that pgc cpu overhead dictates eden size  
+		 */
+		overhead = OMR_MIN(overhead, _partialGcOverhead * 100);
 	}
 
 	return overhead;
