@@ -955,7 +955,33 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 {
 	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
 
+	/*
+	 * Between consecutive GMP cycles, "tenure" space is slowly being consumed by objects which are likely somewhat short lived.
+	 * In order to avoid resizing the heap simply due to these transient objects, only try to expand the heap after a GMP cycle has finished, and the following PGC's 
+	 * have cleared out these transient objects. This gives the most accurate view of the heap, and prevents heap from continuously expanding
+	 */
+	if (0 == ((MM_EnvironmentVLHGC *)env)->_heapSizingData.pgcCountSinceGMPEnd || _searchingForMaxFreeMemAfterGmp) {
+		uintptr_t freeMem = getActualFreeMemorySize();
+		if (freeMem > _freeMemoryOnLastPGC) {
+			_freeMemoryOnLastPGC = freeMem;
+			_searchingForMaxFreeMemAfterGmp = true;
+		} else {
+			_searchingForMaxFreeMemAfterGmp = false;
+			/* Don't need to save _freeMemoryOnLastPGC here - the maximum value is already there */
+			_foundMaxFreeMemAfterGMP = true;
+		}
+	}
+
 	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
+
+	if (!_searchingForMaxFreeMemAfterGmp) {
+		/*
+		 * Heap sizing logic was given the chance to expand due to free memory constraints. Reset values which help track when the maximum free heap space has been reached.
+		 * Note: Heap contraction can occur at any time, wheras heap expansion should only occur at GMP endpoints
+		 */
+		_freeMemoryOnLastPGC = 0;
+		_foundMaxFreeMemAfterGMP = false;
+	}
 
 	if (0 > heapSizeChange) {
 		_contractionSize = (uintptr_t)(heapSizeChange * -1);
@@ -1344,7 +1370,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, 
 
 	uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
-	if (_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount ) {
+	if ((_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount) && _foundMaxFreeMemAfterGMP) {
 		/* Only expand if we didn't expand in last _extensions->heapExpansionStabilizationCount global collections */
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
 		uintptr_t heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
