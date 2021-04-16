@@ -156,8 +156,6 @@ public:
 	UDATA deadClassLoaderCacheSize;
 #endif /*defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING) */
 
-	bool statupPhaseFinished; /**< Used to indicate if the JIT startup phase is finished */
-
 	MM_UnfinalizedObjectList* unfinalizedObjectLists; /**< The global linked list of unfinalized object lists. */
 	
 	UDATA objectListFragmentCount; /**< the size of Local Object Buffer(per gc thread), used by referenceObjectBuffer, UnfinalizedObjectBuffer and OwnableSynchronizerObjectBuffer */
@@ -229,8 +227,6 @@ public:
 	virtual void identityHashDataRemoveRange(MM_EnvironmentBase* env, MM_MemorySubSpace* subspace, UDATA size, void* lowAddress, void* highAddress);
 
 	void updateIdentityHashDataForSaltIndex(UDATA index);
-
-	void setStartpPhaseFinished(){ statupPhaseFinished = true; }
 
 	/**
 	 * Set Tenure address range
@@ -315,7 +311,6 @@ public:
 #if defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING)
 		, deadClassLoaderCacheSize(1024 * 1024) /* default is one MiB */
 #endif /* defined(J9VM_GC_DYNAMIC_CLASS_UNLOADING) */
-		, statupPhaseFinished(false)
 		, unfinalizedObjectLists(NULL)
 		, objectListFragmentCount(0)
 		, numaCommonThreadClassNamePatterns(NULL)

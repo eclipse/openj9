@@ -105,7 +105,7 @@ MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapR
 	, _maxEdenRegionCount(1)
 	, _minEdenRegionCount(1)
 	, _partialGcStartTime(0)
-	, _partialGcOverhead(0.07)
+	, _partialGcOverhead(0.00)
 	, _historicalPartialGCTime(0)
 	, _globalMarkIncrementsTotalTime(0)
 	, _globalMarkIntervalStartTime(0)
@@ -128,7 +128,7 @@ MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
 {
 	uintptr_t maxHeapSize = _extensions->memoryMax;
 
-	double minEdenPercent = 0.01;
+	double minEdenPercent = 0.00;
 	double maxEdenPercent = 0.75;
 
 	if (_extensions->userSpecifiedParameters._Xmn._wasSpecified || _extensions->userSpecifiedParameters._Xmns._wasSpecified) {
@@ -140,7 +140,11 @@ MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
 	}
 
 	_minEdenRegionCount = (uintptr_t)(maxHeapSize * minEdenPercent) / _regionManager->getRegionSize();
+	_minEdenRegionCount = OMR_MAX(1, (uintptr_t)_minEdenRegionCount);
+
 	_maxEdenRegionCount = (uintptr_t)(maxHeapSize * maxEdenPercent) / _regionManager->getRegionSize();
+
+	_partialGcOverhead = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified;
 
 	return true;
 }
@@ -715,6 +719,8 @@ MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_Environm
 	double currentCpuEdenOverhead = predictCpuOverheadForEdenSize(env, currentIdealEdenSize, recommendedEdenChange, freeTenure, avgPgcIntervalUs);
 	double currentEdenHybridOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, currentCpuEdenOverhead, true);
 	double bestOverheadPrediction = currentEdenHybridOverhead;
+
+	Trc_MM_SchedulingDelegate_calculateRecommendedEdenChangeForExpandedHeap(env->getLanguageVMThread(), currentEdenHybridOverhead, (uintptr_t)_historicalPartialGCTime, mapPgcPauseOverheadToPgcCPUOverhead(env, (uintptr_t)_historicalPartialGCTime, true));
 	
 	/* 
 	 * In order to prevent very minor fluctuations in eden size, which don't result in significant performance improvements, 
@@ -742,7 +748,7 @@ MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_Environm
 		} 
 	}
 
-	Trc_MM_SchedulingDelegate_calculateRecommendedEdenChangeForExpandedHeap(env->getLanguageVMThread(), freeTenure, _totalGMPWorkTimeUs / 1000, avgPgcTimeUs, avgPgcIntervalUs, _edenSurvivalRateCopyForward, currentIdealEdenSize + recommendedEdenChange, bestOverheadPrediction);
+	Trc_MM_SchedulingDelegate_calculateRecommendedEdenChangeForExpandedHeap_Exit(env->getLanguageVMThread(), freeTenure, _totalGMPWorkTimeUs / 1000, avgPgcTimeUs, avgPgcIntervalUs, _edenSurvivalRateCopyForward, currentIdealEdenSize + recommendedEdenChange, bestOverheadPrediction);
 
 	return recommendedEdenChange;
 }
@@ -1021,6 +1027,7 @@ MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env)
 	env->_heapSizingData.avgPgcIntervalUs = _averagePgcInterval != 0 ? (_averagePgcInterval - (_historicalPartialGCTime * 1000)) : (_historicalPartialGCTime * 5);
 	env->_heapSizingData.reservedSize = reservedFreeMemory;
 	/* Note that env->_heapSizingData.freeTenure will be updated right before PGC begins, and should not be included here */
+	/* Note that env->_heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
 }
 
 uintptr_t
@@ -1305,22 +1312,38 @@ MM_SchedulingDelegate::calculateEdenSize(MM_EnvironmentVLHGC *env)
 	Assert_MM_true(edenMaximumCount >= 1);
 	Assert_MM_true(edenMaximumCount >= edenMinimumCount);
 
-	uintptr_t desiredEdenCount = freeRegions;
-	if (desiredEdenCount > edenMaximumCount) {
-		desiredEdenCount = edenMaximumCount;
-	} else if (desiredEdenCount < edenMinimumCount) {
-		desiredEdenCount = edenMinimumCount;
-	}
+	/* Allow eden to expand as much as it wants, as long as the total heap can expand to accomodate it */
+	uintptr_t desiredEdenCount = OMR_MAX(edenMaximumCount, edenMinimumCount);
+	intptr_t desiredEdenChangeSize = (intptr_t)desiredEdenCount - (intptr_t)_edenRegionCount;
+	/* Determine if eden should try to grow anyways, or if the heap is tight on memory */
+	uintptr_t maximumHeap = _extensions->softMx == 0 ? _extensions->memoryMax : _extensions->softMx;
+	uintptr_t maximumHeapRegions = maximumHeap / _regionManager->getRegionSize();
+	intptr_t maxHeapExpansionRegions = OMR_MAX(0, ((intptr_t)maximumHeapRegions - (intptr_t)_numberOfHeapRegions - 1));
+
 	Trc_MM_SchedulingDelegate_calculateEdenSize_dynamic(env->getLanguageVMThread(), desiredEdenCount, _edenSurvivalRateCopyForward, _nonEdenSurvivalCountCopyForward, freeRegions, edenMinimumCount, edenMaximumCount);
-	if (desiredEdenCount <= freeRegions) {
-		_edenRegionCount = desiredEdenCount;
+
+	/* Make sure that the total heap can expand enough to satisfy the desired change in eden size
+	 * If heap is fully expanded (or close to) make sure that there are enough free regions to satisfy given eden size change 
+	 */
+	intptr_t maxEdenChange = 0;
+
+	if (0 == maxHeapExpansionRegions) {
+		/* 
+		 * The heap is fully expanded. Eden will be stealing free regions from the entire heap, without telling the heap to grow. 
+		 * Note: When heap is fully expanded, the eden sizing logic knows how much free memory is available in the heap, and knows to not grow too much 
+		 */
+		maxEdenChange = freeRegions;
+		env->_heapSizingData.edenRegionChange = 0;
 	} else {
-		/* there isn't enough memory left for a desired Eden. Allow Eden to shrink to free size(could be less than minimum size or 0) before
-		 * triggering an allocation failure collection (i.e. a global STW collect)
-		 */ 
-		_edenRegionCount = freeRegions;
-		Trc_MM_SchedulingDelegate_calculateEdenSize_reduceToFreeBytes(env->getLanguageVMThread(), desiredEdenCount, _edenRegionCount);
+		/* Eden will inform the total heap resizing that it needs to change to maintain same non-eden size */
+		maxEdenChange = maxHeapExpansionRegions;
+		env->_heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
 	}
+
+	desiredEdenChangeSize = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
+
+	_edenRegionCount = (uintptr_t)OMR_MAX(1, ((intptr_t)_edenRegionCount + desiredEdenChangeSize));
+
 	Trc_MM_SchedulingDelegate_calculateEdenSize_Exit(env->getLanguageVMThread(), (_edenRegionCount * regionSize));
 }
 
@@ -1349,17 +1372,9 @@ MM_SchedulingDelegate::moveTowardRecommendedEdenForExpandedHeap(MM_EnvironmentVL
 	return (intptr_t)targetEdenRegions - (intptr_t)currentIdealEdenRegions;
 }
 
-void
-MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool globalSweepHappened)
+double 
+MM_SchedulingDelegate::calculatePercentOfHeapExpanded(MM_EnvironmentVLHGC *env)
 {
-	if (_currentlyPerformingGMP && !globalSweepHappened) {
-		/* 
-		 * Don't change eden size while GMP cycle is running - 
-		 * Unless a global sweep just happened, in which case we allow eden to change on first PGC after GMP 
-		 */
-		return;
-	}
-
 	double ratioOfHeapExpanded = 0.0;
 	uintptr_t currentHeapSize = _regionManager->getRegionSize() * _numberOfHeapRegions;
 	uintptr_t minimumHeap = OMR_MIN(_extensions->initialMemorySize, currentHeapSize);
@@ -1372,6 +1387,13 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 		uintptr_t maximumHeapVariation = maximumHeap - minimumHeap;
 		ratioOfHeapExpanded = ((double)heapBytesOverMinimum) / ((double)maximumHeapVariation);
 	}
+	return ratioOfHeapExpanded;
+}
+
+void
+MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool globalSweepHappened)
+{
+	double ratioOfHeapExpanded = calculatePercentOfHeapExpanded(env);
 
 	double heapFullyExpandedThreshold = 0.9;
 	double heapPercentExpandedAboveThreshold = 0.0;
@@ -1405,6 +1427,8 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 		resetPgcTimeStatistics(env);
 	}
 
+	Trc_MM_SchedulingDelegate_checkEdenSizeAfterPgc(env->getLanguageVMThread(), heapNotFullyExpandedRecommendation, heapFullyExpandedRecommendation, ratioOfHeapExpanded);
+
 	/** 
 	 * Once ratioOfHeapExpanded is over heapFullyExpandedThreshold, start to blend the recommendations provided by 
 	 * heapFullyExpandedRecommendation and heapNotFullyExpandedRecommendation, based off of how closely heap is to being fully expanded.
@@ -1423,6 +1447,8 @@ MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLH
 	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.03 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
 
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, _partialGcOverhead, false);
+
+	Trc_MM_SchedulingDelegate_calculateEdenChangeHeapNotFullyExpanded(env->getLanguageVMThread(), hybridEdenOverhead, (uintptr_t)_historicalPartialGCTime, mapPgcPauseOverheadToPgcCPUOverhead(env, (uintptr_t)_historicalPartialGCTime, false));
 	 
 	/* 
 	 * Aim to get hybrid PGC overhead between extensions->dnssExpectedTimeRatioMinimum and extensions->dnssExpectedTimeRatioMaximum 
@@ -1531,7 +1557,6 @@ MM_SchedulingDelegate::adjustIdealEdenRegionCount(MM_EnvironmentVLHGC *env)
 
 	/* Inform the _idealEdenRegionCount that we need to change from current value. If there are not enough free regions, then eden will only as big as the amount of free regions */
 	_idealEdenRegionCount += edenChange;
-	
 	/* Make sure we request at least 1 eden region as max */
 	_idealEdenRegionCount = OMR_MAX(1, _idealEdenRegionCount);
 	/* Make sure Min <= Max */

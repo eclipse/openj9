@@ -84,21 +84,23 @@ public:
 
 	uintptr_t _previousPgcPerGmpCount; /**< The number of PGC's that happened between the most recent GMP cycle, and the second most recent GMP cycle*/
 
-	struct MM_GcTimeHeapSizingData {
+	struct MM_HeapSizingData {
 		uint64_t gmpTime;
 		uint64_t avgPgcTimeUs;
 		uint64_t avgPgcIntervalUs;
 		uint64_t pgcCountSinceGMPEnd;
 		uint64_t reservedSize;
 		uint64_t freeTenure;
+		intptr_t edenRegionChange;
 
-		MM_GcTimeHeapSizingData() :
+		MM_HeapSizingData() :
 			gmpTime(0),
 			avgPgcTimeUs(0),
 			avgPgcIntervalUs(0),
 			pgcCountSinceGMPEnd(0),
 			reservedSize(0),
-			freeTenure(0)
+			freeTenure(0),
+			edenRegionChange(0)
 		{
 		}
 	} _heapSizingData; /**< A collection of data that is required by the total heap sizing logic */

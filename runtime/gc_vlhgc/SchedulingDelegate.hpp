@@ -287,6 +287,14 @@ private:
 	intptr_t moveTowardRecommendedEdenForExpandedHeap(MM_EnvironmentVLHGC *env, double edenChangeSpeed);
 
 	/**
+	 * Calculate how much the heap has expanded, relative to -Xms and -Xmx/-Xsoftmx. 
+	 * Ex: If -Xmx1G and -Xmx5G, and current heap is 3G, then we return 0.5
+	 * @param env[in] the main GC thread
+	 * @return Percent of heap expanded, as ratio between 0-1
+	 */
+	double calculatePercentOfHeapExpanded(MM_EnvironmentVLHGC *env);
+
+	/**
 	 * Following a PGC, check how PGC overhead and PGC times are behaving, and modyfing _edenSizeFactor to increase/decrease eden size if needed
 	 * @param env[in] the main GC thread
 	 * @param globalSweepHappened true if a global sweep was performed during the PGC that just completed
