@@ -2204,6 +2204,7 @@ bool TR::CompilationInfo::shouldRetryCompilation(TR_MethodToBeCompiled *entry, T
             case compilationAotBlockFrequencyReloFailure:
             case compilationAotRecompQueuedFlagReloFailure:
             case compilationAOTValidateOSRFailure:
+            case compilationFailedToAcquireVMINLMethod:
                // switch to JIT for these cases (we don't want to relocate again)
                entry->_doNotUseAotCodeFromSharedCache = true;
                tryCompilingAgain = true;
@@ -6997,9 +6998,11 @@ TR::CompilationInfoPerThreadBase::isMethodIneligibleForAot(J9Method *method)
    const J9ROMClass *romClass = J9_CLASS_FROM_METHOD(method)->romClass;
    J9UTF8 *className = J9ROMCLASS_CLASSNAME(romClass);
 
+#if !defined(J9VM_OPT_OPENJDK_METHODHANDLE)
    // Don't AOT-compile anything in j/l/i for now
    if (strncmp(utf8Data(className), "java/lang/invoke/", sizeof("java/lang/invoke/") - 1) == 0)
       return true;
+#endif
 
    if (J9UTF8_LENGTH(className) == 36 &&
       0 == memcmp(utf8Data(className), "com/ibm/rmi/io/FastPathForCollocated", 36))
@@ -11273,6 +11276,10 @@ TR::CompilationInfoPerThreadBase::processException(
    catch (const J9::AOTRelocationRecordGenerationFailure &e)
       {
       _methodBeingCompiled->_compErrCode = compilationAOTRelocationRecordGenerationFailure;
+      }
+   catch (const J9::VMINLMethodFailure &e)
+      {
+      _methodBeingCompiled->_compErrCode = compilationFailedToAcquireVMINLMethod;
       }
    catch (const J9::ClassChainPersistenceFailure &e)
       {

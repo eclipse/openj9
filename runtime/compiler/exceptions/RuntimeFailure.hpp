@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2017 IBM Corp. and others
+ * Copyright (c) 2000, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -78,6 +78,11 @@ class LambdaEnforceScorching : public virtual TR::InsufficientlyAggressiveCompil
 class EnforceProfiling : public virtual TR::InsufficientlyAggressiveCompilation
    {
    virtual const char* what() const throw() { return "Enforce Profiling"; }
+   };
+
+class VMINLMethodFailure : public virtual TR::CompilationException
+   {
+   virtual const char* what() const throw() { return "LinkTo Method Failure"; }
    };
 }
 

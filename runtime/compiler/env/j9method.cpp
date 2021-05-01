@@ -1098,13 +1098,8 @@ bool
 TR_ResolvedRelocatableJ9Method::isInterpreted()
    {
    bool alwaysTreatAsInterpreted = true;
-#if defined(TR_TARGET_S390)
-   TR::Compilation *comp = TR::comp();
-   if (comp && comp->compileRelocatableCode() && comp->getOption(TR_UseSymbolValidationManager))
-      alwaysTreatAsInterpreted = true;
-   else
-      alwaysTreatAsInterpreted = false;
-#elif defined(TR_TARGET_X86)
+
+#if defined(TR_TARGET_X86)
 
    /*if isInterpreted should be only overridden for JNI methods.
    Otherwise buildDirectCall in X86PrivateLinkage.cpp will generate CALL 0
@@ -1265,6 +1260,30 @@ TR_ResolvedRelocatableJ9Method::isUnresolvedString(I_32 cpIndex, bool optimizeFo
    }
 
 void *
+TR_ResolvedRelocatableJ9Method::getConstantDynamicTypeFromCP(int32_t cpIndex)
+   {
+   return NULL;
+   }
+
+bool
+TR_ResolvedRelocatableJ9Method::isConstantDynamic(int32_t cpIndex)
+   {
+   return TR_ResolvedJ9Method::isConstantDynamic(cpIndex);
+   }
+
+bool
+TR_ResolvedRelocatableJ9Method::isUnresolvedConstantDynamic(int32_t cpIndex)
+   {
+   return true;
+   }
+
+void *
+TR_ResolvedRelocatableJ9Method::dynamicConstant(int32_t cpIndex, uintptr_t *obj)
+   {
+   return NULL;
+   }
+
+void *
 TR_ResolvedRelocatableJ9Method::methodTypeConstant(I_32 cpIndex)
    {
    TR_ASSERT(false, "should be unreachable");
@@ -1290,6 +1309,42 @@ TR_ResolvedRelocatableJ9Method::isUnresolvedMethodHandle(I_32 cpIndex)
    {
    TR_ASSERT(false, "should be unreachable");
    return true;
+   }
+
+bool
+TR_ResolvedRelocatableJ9Method::isUnresolvedCallSiteTableEntry(int32_t callSiteIndex)
+   {
+   return true;
+   }
+
+void *
+TR_ResolvedRelocatableJ9Method::callSiteTableEntryAddress(int32_t callSiteIndex)
+   {
+   return NULL;
+   }
+
+bool
+TR_ResolvedRelocatableJ9Method::isUnresolvedMethodTypeTableEntry(int32_t cpIndex)
+   {
+   return true;
+   }
+
+void *
+TR_ResolvedRelocatableJ9Method::methodTypeTableEntryAddress(int32_t cpIndex)
+   {
+   return NULL;
+   }
+
+bool
+TR_ResolvedRelocatableJ9Method::isUnresolvedVarHandleMethodTypeTableEntry(int32_t cpIndex)
+   {
+   return true;
+   }
+
+void *
+TR_ResolvedRelocatableJ9Method::varHandleMethodTypeTableEntryAddress(int32_t cpIndex)
+   {
+   return NULL;
    }
 
 TR_ResolvedMethod *

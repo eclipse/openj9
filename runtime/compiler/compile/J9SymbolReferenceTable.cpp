@@ -475,7 +475,7 @@ J9::SymbolReferenceTable::findOrCreateCallSiteTableEntrySymbol(TR::ResolvedMetho
    void *entryLocation = owningMethod->callSiteTableEntryAddress(callSiteIndex);
    for (symRef = i.getNext(); symRef; symRef = i.getNext())
       if (  owningMethodSymbol->getResolvedMethodIndex() == symRef->getOwningMethodIndex()
-         && symRef->getSymbol()->castToStaticSymbol()->getStaticAddress() == entryLocation)
+         && symRef->getSymbol()->castToStaticSymbol()->getCallSiteIndex() == callSiteIndex)
          {
          return symRef;
          }
@@ -521,7 +521,7 @@ J9::SymbolReferenceTable::findOrCreateMethodTypeTableEntrySymbol(TR::ResolvedMet
    void *entryLocation = owningMethod->methodTypeTableEntryAddress(cpIndex);
    for (symRef = i.getNext(); symRef; symRef = i.getNext())
       if (  owningMethodSymbol->getResolvedMethodIndex() == symRef->getOwningMethodIndex()
-         && symRef->getSymbol()->castToStaticSymbol()->getStaticAddress() == entryLocation)
+         && symRef->getCPIndex() == cpIndex)
          {
          return symRef;
          }
@@ -542,7 +542,7 @@ J9::SymbolReferenceTable::findOrCreateMethodTypeTableEntrySymbol(TR::ResolvedMet
 #endif
       }
 
-   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), -1,
+   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), cpIndex,
                                                     (isUnresolved ? _numUnresolvedSymbols++ : 0), knownObjectIndex);
 
    if (isUnresolved)
@@ -567,7 +567,7 @@ J9::SymbolReferenceTable::findOrCreateVarHandleMethodTypeTableEntrySymbol(TR::Re
    void *entryLocation = owningMethod->varHandleMethodTypeTableEntryAddress(cpIndex);
    for (symRef = i.getNext(); symRef; symRef = i.getNext())
       if (  owningMethodSymbol->getResolvedMethodIndex() == symRef->getOwningMethodIndex()
-         && symRef->getSymbol()->castToStaticSymbol()->getStaticAddress() == entryLocation)
+         && symRef->getCPIndex() == cpIndex)
          {
          return symRef;
          }
@@ -575,7 +575,7 @@ J9::SymbolReferenceTable::findOrCreateVarHandleMethodTypeTableEntrySymbol(TR::Re
    TR::StaticSymbol *sym = TR::StaticSymbol::createMethodTypeTableEntry(trHeapMemory(),cpIndex);
    sym->setStaticAddress(entryLocation);
    bool isUnresolved = owningMethod->isUnresolvedVarHandleMethodTypeTableEntry(cpIndex);
-   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), -1,
+   symRef = new (trHeapMemory()) TR::SymbolReference(self(), sym, owningMethodSymbol->getResolvedMethodIndex(), cpIndex,
                                                        isUnresolved ? _numUnresolvedSymbols++ : 0);
    if (isUnresolved)
       {
