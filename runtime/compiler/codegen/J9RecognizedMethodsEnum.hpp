@@ -210,6 +210,7 @@
    java_lang_String_startsWith,
 
    java_lang_StringLatin1_indexOf,
+   java_lang_StringLatin1_inflate,
 
    java_lang_StringUTF16_charAt,
    java_lang_StringUTF16_checkIndex,

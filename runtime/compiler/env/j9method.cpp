@@ -3153,6 +3153,7 @@ void TR_ResolvedJ9Method::construct()
    static X StringLatin1Methods[] =
       {
       { x(TR::java_lang_StringLatin1_indexOf,                                 "indexOf",       "([BI[BII)I")},
+      { x(TR::java_lang_StringLatin1_inflate,                                 "inflate",       "([BI[CII)V")},
       { TR::unknownMethod }
       };
 
