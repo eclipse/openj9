@@ -337,12 +337,6 @@ private:
 	void adjustIdealEdenRegionCount(MM_EnvironmentVLHGC *env);
 
 	/**
-	 * Returns true if the heap is fully expanded
-	 * @param env[in] the main GC thread
-	 */
-	bool heapIsFullyExpanded(MM_EnvironmentVLHGC *env);
-
-	/**
 	 * Calculate the new Global Mark increment time given the most recent Partial GC time.
 	 * Attempt to keep the GMP times in line with the times in PGC.  Keep track of a weighted
 	 * historic average and set the new GMP increment time to be a result of the adjusted

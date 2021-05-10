@@ -1404,7 +1404,11 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 	intptr_t heapNotFullyExpandedRecommendation = 0;
 	intptr_t heapFullyExpandedRecommendation = 0;
 
-	if (0.0 == heapPercentExpandedAboveThreshold) {
+	if ((0.0 == heapPercentExpandedAboveThreshold) && (0 == _pgcCountSinceGMPEnd % 4)) {
+		/* 
+		 * Wait a few PGC's to re-evaluate eden size. This allows a few historically weighted statistics to converge to new values, 
+		 * and in some situations, prevents eden size from oscillating due to pgc pause time and pgc overhead pulling in different directions.
+		 */
 		heapNotFullyExpandedRecommendation = calculateEdenChangeHeapNotFullyExpanded(env);
 	} else if (0.0 < heapPercentExpandedAboveThreshold) {
 		/** 
@@ -1444,7 +1448,8 @@ intptr_t
 MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env)
 {
 	intptr_t edenRegionChange = 0;
-	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.03 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.1 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, 15);
 
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, _partialGcOverhead, false);
 
@@ -1476,9 +1481,9 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 
 	if (heapFullyExpanded) {
 		/* 
-		 * Eden size is being driven by heuristic which is trying to MINIMIZE hybrid overead. A low avg pgc time, is more desirable than high avg time,
-		 * So the overhead logic needs to map a low avg pgc time, to a low overhead value (aka, a "better"/more desirable value)
-		 * Ex 20ms -> 5% (good/desirable), 1000ms -> 80% (bad/undesirable/eden should probably shrink)
+		 * Eden size is being driven by heuristic which is trying to MINIMIZE hybrid overead, while trying to stay within tarokTargetMaxPauseTime,
+		 * The overhead logic here will map a low avg pgc time (ie, under targetPauseTimeMs), to a low overhead value (aka, a "better"/more desirable value)
+		 * Ex. Suppose tarokTargetMaxPauseTime == 100ms. 20ms -> 5% (good/desirable), 100ms -> 5% (still good), 110ms -> 6% (should possibly shrink) 500ms -> 80% (bad/undesirable/eden should probably shrink)
 		 */
 		double midpointPct = (xmaxpct + xminpct)/2.0;
 		if (pgcPauseTimeMs <= targetPauseTimeMs) {
@@ -1489,26 +1494,26 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 			 * If pgc time is above the max pgc time, map high PGC time values as very very high overhead, in efforts to bring the PGC time down to tarokTargetMaxPauseTime
 			 * If pgc time is only slightly above tarokTargetMaxPauseTime, then there is only a very small overhead penalty, 
 			 * wheras being 2x higher than the target pause time leads to a significantly bigger penalty.
-			 * 
-			 * Note: If pgcPauseTimeMs = 2 x targetPauseTimeMs, the mapped cpu overhead will be the same, regardless of what targetPauseTimeMs is.
 			 */
-			double overheadCurve = pow((double)pgcPauseTimeMs / targetPauseTimeMs, 7.0) + midpointPct - 1;
+			double overheadCurve = pow(1.0156, ((double)pgcPauseTimeMs - targetPauseTimeMs)) + midpointPct - 1;
 			overhead = OMR_MIN(100.0, overheadCurve);
 		}
 		
 	} else {
 		/* 
 		 * Eden sizing logic is trying to keep hybrid overhead between xminpct and xmaxpct, while trying to respect targetPauseTimeMs. 
-		 * The function/model used below follows the following high level concepts:
-		 * - if pgcPauseTimeMs is greater than targetPauseTimeMs, explicitly suggest contraction. ie, overhead = (<xminpct). Note: it is possible for overhead to be negative if pgcPauseTimeMs is far beyond pause target - this is okay.
-		 * - if pgcPauseTimeMs is less than half of targetPauseTimeMs, suggest neither explicit contraction nor explicit expansion, although later blended with CPU overhead it may implicitly result into a contraction/expansion. Value here = xmaxpct
-		 * - if (targetPauseTimeMs/2) < pgcPauseTimeMs < targetPauseTimeMs, the mapped overhead is somewhere between xmaxpct and xminpct. The closer pgcPauseTimeMs is to targetPauseTimeMs, the closer the overhead will be to xminpct (which suggests contraction)
+		 * The function/model used below adheres to the following high level concepts:
+		 * - if pgcPauseTimeMs is greater than targetPauseTimeMs, explicitly suggest contraction. ie, return a value < xminpct. Note: it is possible for this overhead to be negative if pgcPauseTimeMs is far beyond pause target - this is okay.
+		 * - if pgcPauseTimeMs < targetPauseTimeMs - 20, suggest neither explicit contraction nor explicit expansion, but rather, whatever the current cpu overhead currently is (which may be either expansion or contraction). In this case, we are far from targetPauseTimeMs, so cpu overhead can drive eden size 
+		 * - if (targetPauseTimeMs - 20) < pgcPauseTimeMs < targetPauseTimeMs, the mapped overhead is somewhere between xmaxpct and xminpct. The closer pgcPauseTimeMs is to targetPauseTimeMs, the closer the overhead will be to xminpct (which suggests contraction)
+		 * 
+		 *  NOTE: This mapped overhead value is later blended with pgc cpu overhead. This means that if the pgc pause time mapping suggested eden contraction, contraction is not guaranteed.
 		 */
-		double slope = (xmaxpct - xminpct) / ((0.95 * targetPauseTimeMs) - targetPauseTimeMs);
-		overhead = (slope * (double)pgcPauseTimeMs) + ((20.0 * xmaxpct) - (19.0 * xminpct));
+		double slope = (xminpct - xmaxpct) / 20;
+		overhead = (slope * (double)pgcPauseTimeMs) + (xminpct - (slope * targetPauseTimeMs));
 		/* 
-		 * Expanding simply because pgc time is very small is not really beneficial. 
-		 * Instead, if the pgc pause time is still relatively far from target pause time, simply return _partialGcOverhead so that pgc cpu overhead dictates eden size  
+		 * Suggesting expansion simply because pgc time is small, isn't necessarily a good idea. 
+		 * Instead, if the pgc pause time is still relatively far from target pause time, simply return _partialGcOverhead so that pgc cpu overhead, so that pgc cpu overhead is effectively dictating eden size  
 		 */
 		overhead = OMR_MIN(overhead, _partialGcOverhead * 100);
 	}
@@ -1561,18 +1566,6 @@ MM_SchedulingDelegate::adjustIdealEdenRegionCount(MM_EnvironmentVLHGC *env)
 	_idealEdenRegionCount = OMR_MAX(1, _idealEdenRegionCount);
 	/* Make sure Min <= Max */
 	_minimumEdenRegionCount = OMR_MIN(_minimumEdenRegionCount, _idealEdenRegionCount);
-}
-
-bool
-MM_SchedulingDelegate::heapIsFullyExpanded(MM_EnvironmentVLHGC *env)
-{
-	/* 
-	 * If the heap is the size of softmx or larger, eden should use heuristic that looks at free memory, rather than PGC overhead, 
-	 * since there are now free memory constraints eden must be aware of
-	 */
-	uintptr_t currentHeapSize = _regionManager->getRegionSize() * _numberOfHeapRegions;
-	uintptr_t maxHeapSize = _extensions->softMx == 0 ? _extensions->memoryMax : _extensions->softMx;
-	return currentHeapSize >= maxHeapSize;
 }
 
 uintptr_t
