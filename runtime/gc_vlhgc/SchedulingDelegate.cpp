@@ -187,11 +187,8 @@ MM_SchedulingDelegate::calculateGlobalMarkOverhead(MM_EnvironmentVLHGC *env) {
 	/* Determine the time cost we attribute to concurrent GMP work from previous cycle */
 	uint64_t concurrentCostUs = _concurrentMarkGCThreadsTotalWorkTime / 1000;
 
-	/* 
-	 * Total GMP overhead is time taken for all increments + the time we attribute for concurrent GC parts of GMP, and global sweep time.
-	 * Since it's possible mutator threads were idle, only give 0.5 weight for concurrent GMP work
-	 */
-	uint64_t potentialGMPWorkTime =  _globalMarkIncrementsTotalTime + _globalSweepTimeUs + (uint64_t)(concurrentCostUs * 0.5);
+	/* Total GMP work time, is time taken for all increments + the time we attribute for concurrent GC parts of GMP, and global sweep time. */
+	uint64_t potentialGMPWorkTime =  _globalMarkIncrementsTotalTime + _globalSweepTimeUs + concurrentCostUs;
 	double potentialOverhead = (double)potentialGMPWorkTime/globalMarkIntervalTime;
 
 	if ((0.0 < potentialOverhead) && (1.0 > potentialOverhead) && (0 != _globalMarkIntervalStartTime)) {
