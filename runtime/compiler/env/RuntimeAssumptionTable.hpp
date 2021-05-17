@@ -25,10 +25,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "j9.h"
 #include "env/jittypes.h"
 
 class TR_FrontEnd;
 class TR_OpaqueClassBlock;
+class TR_PersistentMemory;
 namespace OMR { class RuntimeAssumption; }
 
 // Note !!!: routine findAssumptionHashTable() assumes that the types of
@@ -125,7 +127,60 @@ class TR_RuntimeAssumptionTable
 
    int32_t countRatAssumptions();
 
+   /**
+    * @brief Helper to query whether serializing an assumption kind is supported.
+    *
+    * @param[in] kind - TR_RuntimeAssumptionKind
+    *
+    * @return true if assumption can be serialized, false otherwise
+    */
+   static bool assumptionCanBeSerialized(TR_RuntimeAssumptionKind kind);
+
+   uint32_t getTotalSizeOfAssumptionsToBeSerialized() { return _totalSizeOfAssumptionsToBeSerialized; }
+
+   /**
+    * @brief Allocates a buffer and serializes Runtime Assumptions
+    *
+    * This method goes through all the runtime assumptions in the RAT that are NOT marked for detach
+    * and calls the assumption's serialize method.
+    *
+    * It also maintains an Atlas that is placed at the start of the
+    * buffer which holds the number of assumptions per kind as well as the size of the section of the
+    * buffer used for each assumption kind.
+    *
+    * @param[in] jitConfig pointer to the J9JITConfig
+    *
+    * @return Buffer containing serialized assumptions
+    */
+   uint8_t *serialize(J9JITConfig *jitConfig);
+
+   /**
+    * @brief Deserializes assumptions from a buffer
+    *
+    * @param[in] fe - TR_Frontend
+    * @param[in] pm - TR_PersistentMemory
+    * @param[in] buffer - pointer to the buffer containing the serialized runtime assumptions
+    * @param[in] kind - Used to only deserialize a specific assumption kind; the default is LastAssumptionKind which means all assumptions
+    *
+    * This method goes through the buffer and calls the static deserialize method on each valid assumption
+    * kind, passing in a pointer to the start of the section for that kind.
+    */
+   void deserialize(TR_FrontEnd *fe, TR_PersistentMemory *pm, uint8_t *buffer, TR_RuntimeAssumptionKind kind = LastAssumptionKind);
+
    private:
+
+   struct AssumptionCountAndSize
+      {
+      uint32_t _count;
+      uint32_t _size;
+      };
+
+   struct SerializedDataAtlas
+      {
+      uint32_t _size;
+      AssumptionCountAndSize _numAssumptionsPerKind[LastAssumptionKind];
+      };
+
    friend class OMR::RuntimeAssumption;
    void addAssumption(OMR::RuntimeAssumption *a, TR_RuntimeAssumptionKind kind, TR_FrontEnd *fe, OMR::RuntimeAssumption **sentinel);
    int32_t reclaimAssumptions(void *md, OMR::RuntimeAssumption **hashTable, OMR::RuntimeAssumption **possiblyRelevantHashTable);
@@ -136,6 +191,8 @@ class TR_RuntimeAssumptionTable
    uint32_t _marked;                            // Counts the number of assumptions waiting to be removed
    int32_t assumptionCount[LastAssumptionKind]; // this never gets decremented
    int32_t reclaimedAssumptionCount[LastAssumptionKind];
+
+   uint32_t _totalSizeOfAssumptionsToBeSerialized;
    };
 
 #endif // RUNTIMEASSUMPTIONTABLE_HPP
