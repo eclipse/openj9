@@ -974,7 +974,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		}
 
 	} else if (_systemGC || globalGCOccured) {
-		/* Always allow heap to expand after a Global GC, since we have indeed found the max free memory */
+		/* Always allow heap to expand after a Global GC */
 		_searchingForMaxFreeMemAfterGmp = false;
 		_foundMaxFreeMemAfterGMP = true;
 	}
@@ -1022,6 +1022,19 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 {
 	intptr_t sizeChange = 0;
 
+	bool expandToSatisfy = false;
+	uintptr_t sizeInRegionsRequired = 0;
+
+	if (NULL != allocDescription) {
+		sizeInRegionsRequired = 1;
+		if (allocDescription->isArrayletSpine()) {
+			sizeInRegionsRequired += allocDescription->getNumArraylets();
+		}
+		if (sizeInRegionsRequired > _globalAllocationManagerTarok->getFreeRegionCount()) {
+			expandToSatisfy = true;
+		}
+	}
+
 	/* 
 	 * Heap sizing is driven by "hybrid Heap overhead". This is a blended value, which combines free memory in "tenure" along with observed GC overhead.
 	 * If the hybrid score is too high (can be acheived by low free memory %, high gc %, or a hybrid of the 2), then the heap calculates an expansion value.
@@ -1033,9 +1046,9 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 	double hybridHeapScore = calculateCurrentHybridHeapOverhead(env);
 	
 	/* Based on the hybrid overhead of gc cpu, and free memory, decide if heap should expand or contract */
-	if (hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) {
+	if ((hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) || expandToSatisfy) {
 		/* Try to expand the heap */
-		sizeChange = (intptr_t)calculateExpansionSize(env, allocDescription, _systemGC);
+		sizeChange = (intptr_t)calculateExpansionSize(env, allocDescription, _systemGC, expandToSatisfy, sizeInRegionsRequired);
 	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) {
 		/* Try to contract the heap */
 		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
@@ -1056,7 +1069,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 double
 MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapChange)
 {
-	double gcOverheadWeight = 0.4; 
+	double gcOverheadWeight = 0.3; 
 	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
 	double freeMemComponant = mapMemoryPercentageToGcOverhead(env, heapChange);
 
@@ -1100,7 +1113,7 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 	double linearMemoryScore = xmaxt - ((freeMemoryRatio - xminf) *  freeSpaceToGcPctRatio);
 
 	/* Adjust the weight for when free memory is low - the function maps to a higher gc cpu overhead (suggesting expansion) */
-	double adjustedMemoryScore = linearMemoryScore * ( (freeMemoryRatio + 25) / freeMemoryRatio);
+	double adjustedMemoryScore = linearMemoryScore * ( (freeMemoryRatio + 10) / freeMemoryRatio);
 
 	double memoryScore = OMR_MAX(adjustedMemoryScore, 0);
 	return memoryScore;
@@ -1108,25 +1121,13 @@ double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBas
 
 
 uintptr_t 
-MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc) 
+MM_MemorySubSpaceTarok::calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc, bool expandToSatisfy, uintptr_t sizeInRegionsRequired) 
 {
 	
 	if((NULL == _physicalSubArena) || !_physicalSubArena->canExpand(env) || (maxExpansionInSpace(env) == 0 )) {
 		/* The PSA or memory sub space cannot be expanded ... we are done */
 		return 0;
 	} 
-	bool expandToSatisfy = false;
-	uintptr_t sizeInRegionsRequired = 0;
-
-	if (NULL != allocDescription) {
-		sizeInRegionsRequired = 1;
-		if (allocDescription->isArrayletSpine()) {
-			sizeInRegionsRequired += allocDescription->getNumArraylets();
-		}
-		if (sizeInRegionsRequired > _globalAllocationManagerTarok->getFreeRegionCount()) {
-			expandToSatisfy = true;
-		}
-	}
 
 	uintptr_t sizeInBytesRequired = sizeInRegionsRequired * _heapRegionManager->getRegionSize();
 	uintptr_t expansionSize = calculateExpansionSizeInternal(env, sizeInBytesRequired, expandToSatisfy);
@@ -1201,7 +1202,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	 * If not, we only entered this function in attempts to respect -Xsoftmx, and should skip this block entirely
 	 */
 	uintptr_t contractSize = 0;
-	if (shouldIncreaseHybridHeapScore) {
+	if (shouldIncreaseHybridHeapScore || _foundMaxFreeMemAfterGMP) {
 		contractSize = calculateTargetContractSize(env, allocSize);
 	}
 	
@@ -1443,6 +1444,11 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
 	intptr_t suggestedChange = heapSizeChangeGranularity;
+
+	/* Aiming to expand the heap so that hybrid heap score is 0.2 below heapExpansionGCTimeThreshold, prevents head from expanding again due to noise */
+	double maxHybridOverheadScore = (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified - 0.20;
+	double minHybridOverheadScore = (double)_extensions->heapContractionGCTimeThreshold._valueSpecified;
+
 	/* Move the heap size in the right direction (expand/contract) to see what the memory overhead, and gc cpu overhead will be, until we find an acceptable change in heap size */
 	while (!foundAcceptableHeapSizeChange) {
 
@@ -1461,7 +1467,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 		/* Test what will happen to gc cpu % and free memory % if we expand/contract by heapSizeChange bytes */
 		double potentialHybridOverhead = calculateHybridHeapOverhead(env, suggestedChange);
 
-		if ((potentialHybridOverhead <= (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) && (potentialHybridOverhead >= (double)_extensions->heapContractionGCTimeThreshold._valueSpecified)) {
+		if ((potentialHybridOverhead <= maxHybridOverheadScore) && (potentialHybridOverhead >= minHybridOverheadScore)) {
 			/* The heap size we tested will give us an acceptable amount of free space, and better gc cpu % */
 			recommendedHeapSize += suggestedChange;
 			foundAcceptableHeapSizeChange = true;

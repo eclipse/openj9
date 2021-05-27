@@ -1023,7 +1023,7 @@ MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env)
 	/* After the first PGC, _averagePgcInterval will still be 0, so make a very rough estimate as to how big the interval between PGC's will be */
 	env->_heapSizingData.avgPgcIntervalUs = _averagePgcInterval != 0 ? (_averagePgcInterval - (_historicalPartialGCTime * 1000)) : (_historicalPartialGCTime * 5);
 	env->_heapSizingData.reservedSize = reservedFreeMemory;
-	/* Note that env->_heapSizingData.freeTenure will be updated right before PGC begins, and should not be included here */
+	env->_heapSizingData.freeTenure = (_regionManager->getRegionSize() * _numberOfHeapRegions) - env->_heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
 	/* Note that env->_heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
 }
 
@@ -1532,7 +1532,6 @@ MM_SchedulingDelegate::calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uin
 	 * it wants to contract/expand, based on how much it will change the overhead and pgc times.
 	 */
 	double pgcCpuOverheadWeight = 0.5;
-	Assert_MM_true((overhead >= 0.0) && (overhead <= 1.0));
 	double pgcTimeOverhead = mapPgcPauseOverheadToPgcCPUOverhead(env, pgcPauseTimeMs, heapFullyExpanded);
 	double hybridEdenOverheadHundredBased = MM_Math::weightedAverage(overhead * 100, pgcTimeOverhead, pgcCpuOverheadWeight);
 	return hybridEdenOverheadHundredBased / 100;

@@ -121,9 +121,15 @@ private:
 	double mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange);
 
 	/**
+	 * Calculates by how many bytes the heap should expand.
+	 * @param env[in] the current thread 
+	 * @param allocDescription[in] information about the allocation
+	 * @param systemGc[in] if system gc just occured
+	 * @param expandToSatisfy GC needs to expand by at least `sizeInRegionsRequired` to avoid Global GC/OOM error
+	 * @param sizeInRegionsRequired by how many regions heap needs to expand to avoid OOM
 	 * @return the number of bytes by which the heap should expand. Return 0 if expansion is not desired, or not possible.
 	 */ 
-	uintptr_t calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc); 
+	uintptr_t calculateExpansionSize(MM_EnvironmentBase * env, MM_AllocateDescription *allocDescription, bool systemGc, bool expandToSatisfy, uintptr_t sizeInRegionsRequired); 
 
 	/**
 	 * @param shouldIncreaseHybridHeapScore informs the function that it should try to contract in order to meet the hybrid heap score requirements. If this is set to false, then we enter this function only to meet -Xsoftmx
