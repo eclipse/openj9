@@ -80,31 +80,6 @@ public:
 	MM_MarkVLHGCStats _markVLHGCStats;
 	MM_SweepVLHGCStats _sweepVLHGCStats;
 
-	/* Statistics which are used in heap sizing logic. Contains information that the heap needs to know about for purposes of heap resizing */
-
-	uintptr_t _previousPgcPerGmpCount; /**< The number of PGC's that happened between the most recent GMP cycle, and the second most recent GMP cycle*/
-
-	struct MM_HeapSizingData {
-		uint64_t gmpTime;
-		uint64_t avgPgcTimeUs;
-		uint64_t avgPgcIntervalUs;
-		uint64_t pgcCountSinceGMPEnd;
-		uint64_t reservedSize;
-		uint64_t freeTenure;
-		intptr_t edenRegionChange;
-
-		MM_HeapSizingData() :
-			gmpTime(0),
-			avgPgcTimeUs(0),
-			avgPgcIntervalUs(0),
-			pgcCountSinceGMPEnd(0),
-			reservedSize(0),
-			freeTenure(0),
-			edenRegionChange(0)
-		{
-		}
-	} _heapSizingData; /**< A collection of data that is required by the total heap sizing logic */
-
 #if defined(J9VM_GC_MODRON_COMPACTION)
 	MM_CompactVLHGCStats _compactVLHGCStats;
 #endif /* J9VM_GC_MODRON_COMPACTION */
@@ -135,16 +110,6 @@ public:
 	 * Create an Environment object.
 	 */
 	MM_EnvironmentVLHGC(J9JavaVM *javaVM);
-
-	/* 
-	 * When a GMP recently occured, GMP should be weighted according to how many PGC's occured before the GMP (historically) - NOT how many we currently observe.
-	 *	If we saw 200 Pgc's before the recent GMP cycle, then we assume that we will still have around 200 PGC's, that is, until we are informed that this count is higher
-	 *	If only had 2 PGC's happened before the last GMP, then GMP indeed has significant weight, and reading from _previousPgcPerGmpCount, will inform us of that	 
-	 *  @return A PGC count which is representative of what we will likely observe until the next GMP
-	 */ 
-	uintptr_t getRepresentativePgcPerGmpCount(){
-		return (uintptr_t)OMR_MAX(_previousPgcPerGmpCount, _heapSizingData.pgcCountSinceGMPEnd);
-	}
 
 protected:
 	virtual bool initialize(MM_GCExtensionsBase *extensions);

@@ -960,9 +960,9 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 	 * In order to avoid resizing the heap simply due to these transient objects, only try to expand the heap after a GMP cycle has finished, and the following PGC's 
 	 * have cleared out these transient objects. This gives the most accurate view of the heap, and prevents heap from continuously expanding
 	 */
-	bool globalGCOccured = _previouslyObservedPGCCount == ((MM_EnvironmentVLHGC *)env)->_heapSizingData.pgcCountSinceGMPEnd;
+	bool globalGCOccured = _previouslyObservedPGCCount == _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd;
 
-	if (0 == ((MM_EnvironmentVLHGC *)env)->_heapSizingData.pgcCountSinceGMPEnd || _searchingForMaxFreeMemAfterGmp) {
+	if (0 == _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd || _searchingForMaxFreeMemAfterGmp) {
 		uintptr_t freeMem = getActualFreeMemorySize();
 		if (freeMem > _freeMemoryOnLastPGC) {
 			_freeMemoryOnLastPGC = freeMem;
@@ -979,10 +979,20 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		_foundMaxFreeMemAfterGMP = true;
 	}
 
-	intptr_t edenChangeRegions = ((MM_EnvironmentVLHGC *)env)->_heapSizingData.edenRegionChange;
+	intptr_t edenChangeRegions = _extensions->globalVLHGCStats._heapSizingData.edenRegionChange;
 	intptr_t edenChangeRegionsBytes = edenChangeRegions * (intptr_t)_heapRegionManager->getRegionSize();
 
 	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
+
+	if (0 == heapSizeChange) {
+		if (edenChangeRegionsBytes < 0) {
+			/* Heap is only contracting because eden is shrinking */
+			_extensions->heap->getResizeStats()->setLastContractReason(EDEN_CONTRACTING);
+		} else if (edenChangeRegionsBytes > 0) {
+			/* Heap is only expanding because eden is expanding */
+			_extensions->heap->getResizeStats()->setLastExpandReason(EDEN_EXPANDING);
+		}
+	}
 
 	/* Adjust the heap size by both the required amount for eden AND non-eden. Non-eden size should generally be kept the same size, so that GMP kickoff, and incremental defragmentation timing stays accurate */
 	heapSizeChange += edenChangeRegionsBytes;
@@ -1007,7 +1017,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		_expansionSize = 0;
 	}
 	/* Certain edge cases will trigger repetitive Global Gc's (which need to be treated differently), and this is tracked by observing pgc count */
-	_previouslyObservedPGCCount = ((MM_EnvironmentVLHGC *)env)->_heapSizingData.pgcCountSinceGMPEnd;
+	_previouslyObservedPGCCount = _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd;
 
 	env->popVMstate(oldVMState);
 }
@@ -1081,13 +1091,10 @@ MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, int
 }
 
 double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange)
-{
-	/* With the model being used to map free memory % to gc %, if free memory is very low, the model will increasingly suggest expansion to avoid OOM errors*/
-	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
-	
+{	
 	/* At this point, eden is full, so all the free space is all part of tenure */
-	uintptr_t tenureSize = getActiveMemorySize() - (uintptr_t)envVLHGC->_heapSizingData.reservedSize;
-	uintptr_t freeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
+	uintptr_t tenureSize = getActiveMemorySize() - (uintptr_t)_extensions->globalVLHGCStats._heapSizingData.reservedSize;
+	uintptr_t freeTenure = (uintptr_t)_extensions->globalVLHGCStats._heapSizingData.freeTenure;
 
 	intptr_t newFreeTenureSize = (intptr_t)freeTenure + heapSizeChange;
 	intptr_t newTotalMemorySize = (intptr_t)tenureSize + heapSizeChange;
@@ -1441,7 +1448,6 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
 	intptr_t heapSizeChangeGranularity = hybridOverheadTooHigh ? (intptr_t)_heapRegionManager->getRegionSize() : (-1 * (intptr_t)_heapRegionManager->getRegionSize());
 	uintptr_t maxHeapSizeChange = (uintptr_t)(1.25 * (double)recommendedHeapSize);
-	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
 
 	intptr_t suggestedChange = heapSizeChangeGranularity;
 
@@ -1459,7 +1465,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 			}
 		} else {
 			/* Don't contract so much as to exhaust free tenure */
-			if ((suggestedChange * -1) >= (intptr_t)envVLHGC->_heapSizingData.freeTenure) {
+			if ((suggestedChange * -1) >= (intptr_t)_extensions->globalVLHGCStats._heapSizingData.freeTenure) {
 				break;
 			}
 		}
@@ -1500,7 +1506,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 			percentDiff = OMR_MAX(percentDiff, 5.0);
 
 			/* Be a bit more aggressive with expansion than contraction.  */	
-			sizeChangeFactor = 3;	
+			sizeChangeFactor = 2;	
 
 		} else if (currentHybridHeapScore <= (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) {
 			/* Try to bring hybridHeapScore a little bit above _extensions->heapContractionGCTimeThreshold.
@@ -1524,17 +1530,15 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 double 
 MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, intptr_t heapSizeChange)
 {
-	MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
-
 	/* 
 	 * Since we only attempt to resize after PGC's and Global GC's, if the PGC count has increased, it means we are resizing after a PGC
 	 * and the GMP and PGC statistics we have collected, are useable. Otherwise, use backup methods which are independant of heapSizeChange
 	 */
 
-	if (_previouslyObservedPGCCount != envVLHGC->_heapSizingData.pgcCountSinceGMPEnd) {
+	if (_previouslyObservedPGCCount != _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd) {
 		/* Resizing after a PGC */
 
-		uintptr_t pgcCount = envVLHGC->getRepresentativePgcPerGmpCount();
+		uintptr_t pgcCount = _extensions->globalVLHGCStats.getRepresentativePgcPerGmpCount();
 
 		if ((0 == pgcCount) && (0 == _lastObservedGcPercentage)) {
 			/* Very first time we are resizing, assume GC % is heapExpansionGCTimeThreshold. This makes it slightly easier to expand the heap */
@@ -1547,8 +1551,7 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 				 * Determine what the gc cpu % would be if we changed the heap by heapSizeChange bytes
 				 * Main idea is that the change in number of pgc's (per gmp) will be proportional to how much free tenure changes;
 				 */
-				MM_EnvironmentVLHGC *envVLHGC = (MM_EnvironmentVLHGC *)env;
-				uintptr_t currentFreeTenure = (uintptr_t)envVLHGC->_heapSizingData.freeTenure;
+				uintptr_t currentFreeTenure = (uintptr_t)_extensions->globalVLHGCStats._heapSizingData.freeTenure;
 				uintptr_t potentialFreeTenure = 0;
 				if (heapSizeChange <= (-1 * (intptr_t)currentFreeTenure) ) {
 					/* If we try to shrink too much, too fast, tenure will be way too small, causing lots of GC work */
@@ -1560,8 +1563,8 @@ MM_MemorySubSpaceTarok::calculateGcPctForHeapChange(MM_EnvironmentBase *env, int
 			}
 
 			/* For total heap resizing, only consider GMP cpu overhead. PGC overhead is being controlled by eden sizing logic, so no need to include it here */
-			double gcActiveTime = (double)envVLHGC->_heapSizingData.gmpTime; 
-			double gcInterval = (double)(pgcCount  * (envVLHGC->_heapSizingData.avgPgcTimeUs + envVLHGC->_heapSizingData.avgPgcIntervalUs));
+			double gcActiveTime = (double)_extensions->globalVLHGCStats._heapSizingData.gmpTime; 
+			double gcInterval = (double)(pgcCount  * (_extensions->globalVLHGCStats._heapSizingData.avgPgcTimeUs + _extensions->globalVLHGCStats._heapSizingData.avgPgcIntervalUs));
 			double gcActiveRatio = gcActiveTime / gcInterval;
 
 			_lastObservedGcPercentage = gcActiveRatio * 100;

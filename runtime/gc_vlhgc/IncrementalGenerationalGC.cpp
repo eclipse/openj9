@@ -1137,7 +1137,7 @@ MM_IncrementalGenerationalGC::runGlobalMarkPhaseIncrement(MM_EnvironmentVLHGC *e
 		reportGMPIncrementEnd(env);
 		reportGMPCycleEnd(env);
 		/* Remember how many PGC's occured per GMP cycle, so that we can weight GMP cost properly */
-		env->_previousPgcPerGmpCount = _schedulingDelegate.getPgcCountSinceGMPEnd(env);
+		_extensions->globalVLHGCStats._previousPgcPerGmpCount = _schedulingDelegate.getPgcCountSinceGMPEnd(env);
 		_schedulingDelegate.globalMarkCycleEnd(env);
 		/* clear new OwnableSynchronizerObject count after scanOwnableSynchronizerObject in clearable phase */
 		_extensions->allocationStats.clearOwnableSynchronizer();

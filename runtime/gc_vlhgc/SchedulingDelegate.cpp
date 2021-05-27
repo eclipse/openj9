@@ -783,7 +783,7 @@ MM_SchedulingDelegate::predictNumberOfCollections(MM_EnvironmentVLHGC *env, uint
 {
 	/* The number of PGC collections is proportional to how much free tenure will be left after we expand/contract eden */
 	double collectionCountChange = (double)(freeTenure - edenSizeChange)/freeTenure;
-	return (double)env->getRepresentativePgcPerGmpCount() * collectionCountChange;
+	return (double)_extensions->globalVLHGCStats.getRepresentativePgcPerGmpCount() * collectionCountChange;
 }
 
 double
@@ -1016,15 +1016,15 @@ MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env)
 	uintptr_t survivorSize = (uintptr_t)(regionSize * _averageSurvivorSetRegionCount);
 	uintptr_t reservedFreeMemory =  getCurrentEdenSizeInBytes(env) + survivorSize;
 
-	env->_heapSizingData.gmpTime = _totalGMPWorkTimeUs == 0 ? 1 : _totalGMPWorkTimeUs;
-	env->_heapSizingData.pgcCountSinceGMPEnd = _pgcCountSinceGMPEnd;
-	env->_heapSizingData.avgPgcTimeUs = _historicalPartialGCTime * 1000;
+	_extensions->globalVLHGCStats._heapSizingData.gmpTime = _totalGMPWorkTimeUs == 0 ? 1 : _totalGMPWorkTimeUs;
+	_extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd = _pgcCountSinceGMPEnd;
+	_extensions->globalVLHGCStats._heapSizingData.avgPgcTimeUs = _historicalPartialGCTime * 1000;
 
 	/* After the first PGC, _averagePgcInterval will still be 0, so make a very rough estimate as to how big the interval between PGC's will be */
-	env->_heapSizingData.avgPgcIntervalUs = _averagePgcInterval != 0 ? (_averagePgcInterval - (_historicalPartialGCTime * 1000)) : (_historicalPartialGCTime * 5);
-	env->_heapSizingData.reservedSize = reservedFreeMemory;
-	env->_heapSizingData.freeTenure = (_regionManager->getRegionSize() * _numberOfHeapRegions) - env->_heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
-	/* Note that env->_heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
+	_extensions->globalVLHGCStats._heapSizingData.avgPgcIntervalUs = _averagePgcInterval != 0 ? (_averagePgcInterval - (_historicalPartialGCTime * 1000)) : (_historicalPartialGCTime * 5);
+	_extensions->globalVLHGCStats._heapSizingData.reservedSize = reservedFreeMemory;
+	_extensions->globalVLHGCStats._heapSizingData.freeTenure = (_regionManager->getRegionSize() * _numberOfHeapRegions) - _extensions->globalVLHGCStats._heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
+	/* Note that _extensions->globalVLHGCStats._heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
 }
 
 uintptr_t
@@ -1330,11 +1330,11 @@ MM_SchedulingDelegate::calculateEdenSize(MM_EnvironmentVLHGC *env)
 		 * Note: When heap is fully expanded, the eden sizing logic knows how much free memory is available in the heap, and knows to not grow too much 
 		 */
 		maxEdenChange = freeRegions;
-		env->_heapSizingData.edenRegionChange = 0;
+		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = 0;
 	} else {
 		/* Eden will inform the total heap resizing that it needs to change to maintain same non-eden size */
 		maxEdenChange = maxHeapExpansionRegions;
-		env->_heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
+		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
 	}
 
 	desiredEdenChangeSize = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
