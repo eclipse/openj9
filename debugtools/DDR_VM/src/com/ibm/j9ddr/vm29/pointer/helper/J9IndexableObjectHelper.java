@@ -143,6 +143,36 @@ public class J9IndexableObjectHelper extends J9ObjectHelper
 	}
 
 	/**
+	 * @param objPointer the contiguous array object who's dataAddr field we are accessing
+	 * @throws CorruptDataException 
+	 */
+	public static VoidPointer getDataAddrForContiguous(J9IndexableObjectPointer objPointer) throws CorruptDataException, NoSuchFieldException
+	{
+		if (mixedReferenceMode) {
+			if (compressObjectReferences) {
+				return VoidPointer.cast((J9IndexableObjectContiguousCompressedPointer.cast(objPointer)).dataAddr());
+			}
+			return VoidPointer.cast((J9IndexableObjectContiguousFullPointer.cast(objPointer)).dataAddr());
+		} 
+		return VoidPointer.cast((J9IndexableObjectContiguousPointer.cast(objPointer)).dataAddr());
+	}
+
+	/**
+	 * @param objPointer the discontiguous array object who's dataAddr field we are accessing
+	 * @throws CorruptDataException 
+	 */
+	public static VoidPointer getDataAddrForDiscontiguous(J9IndexableObjectPointer objPointer) throws CorruptDataException, NoSuchFieldException
+	{
+		if (mixedReferenceMode) {
+			if (compressObjectReferences) {
+				return VoidPointer.cast((J9IndexableObjectDiscontiguousCompressedPointer.cast(objPointer)).dataAddr());
+			}
+			return VoidPointer.cast((J9IndexableObjectDiscontiguousFullPointer.cast(objPointer)).dataAddr());
+		}
+		return VoidPointer.cast((J9IndexableObjectDiscontiguousPointer.cast(objPointer)).dataAddr());
+	}
+
+	/**
 	 * @param objPointer array object who's elements we are outputting to dst
 	 * @param index the desired index within then array
 	 * @param dataSize size of the data held in the array
@@ -154,6 +184,15 @@ public class J9IndexableObjectHelper extends J9ObjectHelper
 		return ObjectModel.getElementAddress(objPointer, index, dataSize);
 	}
 	
+	/**
+	 * @param objPointer array object that we are checking if isInlineContiguousArraylet
+	 * @throws CorruptDataException 
+	 */
+	public static boolean isInlineContiguousArraylet(J9IndexableObjectPointer objPointer) throws CorruptDataException
+	{
+		return ObjectModel.isInlineContiguousArraylet(objPointer);
+	}
+
 	/**
 	 *  @param objPointer array object who's elements we are outputting to dst
 	 *  @param dst destination array where we will output the elements
