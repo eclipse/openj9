@@ -4263,6 +4263,23 @@ static int32_t rampupPhaseID = 0;
 static bool firstIdleStateAfterStartup = false;
 static uint64_t timeToAllocateTrackingHT = 0xffffffffffffffff; // never
 
+/**
+ * @brief Contains the logic that determines what state the JIT should
+ *        transition to, if at all.
+ *
+ * @param[in]  compInfo The TR::CompilationInfo object
+ * @param[in]  persistentInfo The TR::PersistentInfo Object
+ * @param[in]  oldState The old state
+ * @param[out] newState The new state the JIT may transition to
+ * @param[out] lastTimeInJITStartupMode Keeps track of when the JIT transitioned out of startup
+ * @param[in]  avgJvmCpuUtil The average JVM CPU utilization
+ * @param[in]  totalSamples Total samples acquired within the last sampling window
+ * @param[in]  totalSamplesNormalized Total samples normalized
+ * @param[in]  samplesSentNormalized Total samples sent normalized
+ * @param[in]  numClassesLoadedInIntervalNormalized Classes loaded normalized
+ * @param[in]  crtElapsedTime The elapsed time since the JVM start
+ * @param[in]  diffTime The length of the sampled interval
+ */
 static void transitionToNewStateIfNeeded(TR::CompilationInfo * compInfo,
                                          TR::PersistentInfo *persistentInfo,
                                          uint8_t oldState,
@@ -4371,6 +4388,17 @@ static void transitionToNewStateIfNeeded(TR::CompilationInfo * compInfo,
    //t= 98186 oldState=3 newState=2 cSamples=125 iSamples= 11 comp=239 recomp=  4, Q_SZ=114
    }
 
+/**
+ * @brief Tasks to perform if the JIT changed states
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] oldState The old state the JIT was in
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] avgJvmCpuUtil The Average JVM CPU Utilization
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void onStateChange(J9JavaVM * javaVM,
                           TR::CompilationInfo * compInfo,
                           TR::PersistentInfo *persistentInfo,
@@ -4463,6 +4491,13 @@ static void onStateChange(J9JavaVM * javaVM,
       }
    }
 
+/**
+ * @brief JProfiling Heuristics surrounding recompilation
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] lastTimeInJITStartupMode The last time the JIT was in startup
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void adjustJProfilingRecompConfig(J9JavaVM * javaVM,
                                          uint64_t lastTimeInJITStartupMode,
                                          uint64_t crtElapsedTime)
@@ -4526,6 +4561,16 @@ static void adjustJProfilingRecompConfig(J9JavaVM * javaVM,
    */
    }
 
+/**
+ * @brief Logic to control enabling/disabling GCR
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] lastTimeInJITStartupMode The last time the JIT was in startup
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void gcrLogic(J9JavaVM * javaVM,
                      TR::CompilationInfo * compInfo,
                      TR::PersistentInfo *persistentInfo,
@@ -4583,6 +4628,16 @@ static void gcrLogic(J9JavaVM * javaVM,
       }
    }
 
+/**
+ * @brief Logic to control when to process HW Profiling Buffers
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] oldState The old state the JIT was in
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void riBufferProcessingLogic(J9JavaVM * javaVM,
                                     TR::CompilationInfo * compInfo,
                                     TR::PersistentInfo *persistentInfo,
@@ -4644,6 +4699,14 @@ static void riBufferProcessingLogic(J9JavaVM * javaVM,
       }
    }
 
+/**
+ * @brief Ensure application threads have sufficient CPU resources. As the application threads are
+ *        what do the actual work in a java application, this ensures that the compilation threads
+ *        don't take too much CPU resources away from them.
+ *
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void ensureAppThreadsHaveSufficientCPU(TR::CompilationInfo * compInfo, uint64_t crtElapsedTime)
    {
    // Control how much application threads will be sleeping to give
@@ -4673,6 +4736,15 @@ static void ensureAppThreadsHaveSufficientCPU(TR::CompilationInfo * compInfo, ui
       }
    }
 
+/**
+ * @brief Logic to control when to process the IProfiler Buffers
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] jitConfig The J9JITConfig
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] lastTimeInJITStartupMode The last time the JIT was in startup
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void iprofilerLogic(J9JavaVM * javaVM,
                            J9JITConfig * jitConfig,
                            TR::CompilationInfo * compInfo,
@@ -4714,6 +4786,16 @@ static void iprofilerLogic(J9JavaVM * javaVM,
 #endif // defined(J9VM_INTERP_PROFILING_BYTECODES)
    }
 
+/**
+ * @brief Heuristics for when the JVM is in the startup phase
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistenInfo object
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[inout] lastTimeInStartupMode THe last time the JVM was in startup
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void startupPhaseHeuristics(J9JavaVM * javaVM,
                                    TR::CompilationInfo * compInfo,
                                    TR::PersistentInfo *persistentInfo,
@@ -4759,6 +4841,14 @@ static void startupPhaseHeuristics(J9JavaVM * javaVM,
       }
    }
 
+/**
+ * @brief Heuristics for when the JVM is in early startup phase
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void earlyStartupPhaseHeuristics(J9JavaVM * javaVM,
                                         TR::PersistentInfo *persistentInfo,
                                         uint8_t newState,
@@ -4784,6 +4874,14 @@ static void earlyStartupPhaseHeuristics(J9JavaVM * javaVM,
       }
    }
 
+/**
+ * @brief Tasks to perform once out of the startup phase
+ *
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void outOfStartupPhase(TR::CompilationInfo * compInfo,
                               TR::PersistentInfo *persistentInfo,
                               uint8_t newState,
@@ -4865,6 +4963,16 @@ static void outOfStartupPhase(TR::CompilationInfo * compInfo,
       }
    }
 
+/**
+ * @brief Heuristics to run during startup
+ *
+ * @param[in] javaVM The J9JavaVM
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] persistentInfo The TR::PersistentInfo object
+ * @param[in] newState The new state the JIT may have transitioned to
+ * @param[in] lastTimeInStartupMode The last time the JVM was in startup
+ * @param[in] crtElapsedTime The elapsed time since JVM start
+ */
 static void startupHeuristics(J9JavaVM * javaVM,
                               TR::CompilationInfo * compInfo,
                               TR::PersistentInfo *persistentInfo,
@@ -4928,6 +5036,14 @@ static void startupHeuristics(J9JavaVM * javaVM,
       } // if (javaVM->phase != J9VM_PHASE_NOT_STARTUP)
    }
 
+/**
+ * @brief Determine whether the JIT should change states, and run heuristics
+ *        and other tasks appropriately.
+ *
+ * @param[in] jitConfig The J9JITConfig
+ * @param[in] compInfo The TR::CompilationInfo object
+ * @param[in] diffTime The length of the sampled interval
+ */
 static void jitStateLogic(J9JITConfig * jitConfig, TR::CompilationInfo * compInfo, uint32_t diffTime)
    {
    // We enter STARTUP too often because IDLE is not operating correctly
