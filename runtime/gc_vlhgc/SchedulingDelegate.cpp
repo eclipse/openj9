@@ -57,7 +57,7 @@
  */
 const double measureScanRateHistoricWeightForGMP = 0.50;
 const double measureScanRateHistoricWeightForPGC = 0.95;
-const double partialGCTimeHistoricWeight = 0.80;
+const double partialGCTimeHistoricWeight = 0.50;
 const double incrementalScanTimePerGMPHistoricWeight = 0.50;
 const double bytesScannedConcurrentlyPerGMPHistoricWeight = 0.50;
 const uintptr_t minimumPgcTime = 5;
@@ -1011,20 +1011,33 @@ MM_SchedulingDelegate::getDefragmentEmptinessThreshold(MM_EnvironmentVLHGC *env)
 void
 MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env) 
 {	
-	/* Determine how much space needs to be reserved for eden + survivor space */
 	uintptr_t regionSize = _regionManager->getRegionSize();
+	uintptr_t totalHeapSize = regionSize * _numberOfHeapRegions;
+	/* Determine how much space needs to be reserved for eden + survivor space */
 	uintptr_t survivorSize = (uintptr_t)(regionSize * _averageSurvivorSetRegionCount);
-	uintptr_t reservedFreeMemory =  getCurrentEdenSizeInBytes(env) + survivorSize;
+	/* In certain edge cases, eden + survivor might be calculated as larger than the heap size (which is not possible), and that causes innacuracies down the line */
+	uintptr_t reservedFreeMemory =  OMR_MIN((getCurrentEdenSizeInBytes(env) + survivorSize), totalHeapSize);
 
-	_extensions->globalVLHGCStats._heapSizingData.gmpTime = _totalGMPWorkTimeUs == 0 ? 1 : _totalGMPWorkTimeUs;
+	/* If a GMP has not yet occured, make a rough guess as to how expensive GMP will be */
+	_extensions->globalVLHGCStats._heapSizingData.gmpTime = _totalGMPWorkTimeUs == 0 ? _historicalPartialGCTime * 1000 : _totalGMPWorkTimeUs;
 	_extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd = _pgcCountSinceGMPEnd;
 	_extensions->globalVLHGCStats._heapSizingData.avgPgcTimeUs = _historicalPartialGCTime * 1000;
 
 	/* After the first PGC, _averagePgcInterval will still be 0, so make a very rough estimate as to how big the interval between PGC's will be */
 	_extensions->globalVLHGCStats._heapSizingData.avgPgcIntervalUs = _averagePgcInterval != 0 ? (_averagePgcInterval - (_historicalPartialGCTime * 1000)) : (_historicalPartialGCTime * 5);
 	_extensions->globalVLHGCStats._heapSizingData.reservedSize = reservedFreeMemory;
-	_extensions->globalVLHGCStats._heapSizingData.freeTenure = (_regionManager->getRegionSize() * _numberOfHeapRegions) - _extensions->globalVLHGCStats._heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
-	/* Note that _extensions->globalVLHGCStats._heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
+
+	if (_extensions->globalVLHGCStats._heapSizingData.reservedSize + _liveSetBytesAfterPartialCollect < totalHeapSize) {
+		uintptr_t freeTenureEstimate = totalHeapSize - _extensions->globalVLHGCStats._heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
+		uintptr_t freeTenureEstimateFromBeforePgc = _extensions->globalVLHGCStats._heapSizingData.freeTenure;
+		/* Free tenure was also recorded right before PGC. Use the lower of the two estimates for later calculations */
+		_extensions->globalVLHGCStats._heapSizingData.freeTenure = OMR_MIN(freeTenureEstimateFromBeforePgc, freeTenureEstimate);
+	} else {
+		/* Certain edge cases (usually in startup) the total heap might be too small for eden + survivor, and the live set, so free tenure is effectively 0 */
+		_extensions->globalVLHGCStats._heapSizingData.freeTenure = 0;
+	}
+
+	/* NOTE: _extensions->globalVLHGCStats._heapSizingData.edenRegionChange is updated elsewhere, and should not be included here */
 }
 
 uintptr_t
@@ -1332,9 +1345,14 @@ MM_SchedulingDelegate::calculateEdenSize(MM_EnvironmentVLHGC *env)
 		maxEdenChange = freeRegions;
 		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = 0;
 	} else {
-		/* Eden will inform the total heap resizing that it needs to change to maintain same non-eden size */
+		/* Eden will inform the total heap resizing logic, that it needs to change total heap size in order to maintain same "tenure" size */
 		maxEdenChange = maxHeapExpansionRegions;
-		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
+		intptr_t edenChangeWithSurvivorHeadroom = desiredEdenChangeSize;
+		if (0 < desiredEdenChangeSize) {
+			/* Total heap needs to be aware that by increasing eden size, the amount of survivor space should also increase */
+			edenChangeWithSurvivorHeadroom = desiredEdenChangeSize + (intptr_t)ceil(((double)desiredEdenChangeSize * _edenSurvivalRateCopyForward));
+		}
+		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, edenChangeWithSurvivorHeadroom);
 	}
 
 	desiredEdenChangeSize = OMR_MIN(maxEdenChange, desiredEdenChangeSize);
@@ -1401,11 +1419,7 @@ MM_SchedulingDelegate::checkEdenSizeAfterPgc(MM_EnvironmentVLHGC *env, bool glob
 	intptr_t heapNotFullyExpandedRecommendation = 0;
 	intptr_t heapFullyExpandedRecommendation = 0;
 
-	if ((0.0 == heapPercentExpandedAboveThreshold) && (0 == _pgcCountSinceGMPEnd % 4)) {
-		/* 
-		 * Wait a few PGC's to re-evaluate eden size. This allows a few historically weighted statistics to converge to new values, 
-		 * and in some situations, prevents eden size from oscillating due to pgc pause time and pgc overhead pulling in different directions.
-		 */
+	if (0.0 == heapPercentExpandedAboveThreshold) {
 		heapNotFullyExpandedRecommendation = calculateEdenChangeHeapNotFullyExpanded(env);
 	} else if (0.0 < heapPercentExpandedAboveThreshold) {
 		/** 
@@ -1445,8 +1459,10 @@ intptr_t
 MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env)
 {
 	intptr_t edenRegionChange = 0;
-	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.1 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.05 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
 	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, 15);
+	/* By changing by at least 2 regions, it allows eden size to grow a bit faster (usually in startup phase when no Xmx was set, and there is only 1 eden region) */
+	edenChangeMagnitude = OMR_MAX(edenChangeMagnitude, 2);
 
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, _partialGcOverhead, false);
 
@@ -1626,7 +1642,6 @@ MM_SchedulingDelegate::heapReconfigured(MM_EnvironmentVLHGC *env)
 	
 	/* The eden size is  being driven by GC overhead and time - Keep eden size the same. If eden needs to change, it will change elsewhere */
 	uintptr_t edenIdealBytes = getIdealEdenSizeInBytes(env);
-
 	_idealEdenRegionCount = OMR_MAX((edenIdealBytes + regionSize - 1) / regionSize, (edenMinimumBytes + regionSize - 1) / regionSize);
 
 	Assert_MM_true(_idealEdenRegionCount > 0);

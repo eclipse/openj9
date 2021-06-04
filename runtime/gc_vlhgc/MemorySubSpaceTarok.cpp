@@ -958,9 +958,10 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 	/*
 	 * Between consecutive GMP cycles, "tenure" space is slowly being consumed by objects which are likely somewhat short lived.
 	 * In order to avoid resizing the heap simply due to these transient objects, only try to expand the heap after a GMP cycle has finished, and the following PGC's 
-	 * have cleared out these transient objects. This gives the most accurate view of the heap, and prevents heap from continuously expanding
+	 * have freed these transient objects. This gives the most accurate view of the heap, and prevents heap from continuously expanding and contracting
 	 */
 	bool globalGCOccured = _previouslyObservedPGCCount == _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd;
+
 
 	if (0 == _extensions->globalVLHGCStats._heapSizingData.pgcCountSinceGMPEnd || _searchingForMaxFreeMemAfterGmp) {
 		uintptr_t freeMem = getActualFreeMemorySize();
@@ -979,10 +980,10 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		_foundMaxFreeMemAfterGMP = true;
 	}
 
+	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
+
 	intptr_t edenChangeRegions = _extensions->globalVLHGCStats._heapSizingData.edenRegionChange;
 	intptr_t edenChangeRegionsBytes = edenChangeRegions * (intptr_t)_heapRegionManager->getRegionSize();
-
-	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
 	if (0 == heapSizeChange) {
 		if (edenChangeRegionsBytes < 0) {
@@ -1040,6 +1041,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 		if (allocDescription->isArrayletSpine()) {
 			sizeInRegionsRequired += allocDescription->getNumArraylets();
 		}
+
 		if (sizeInRegionsRequired > _globalAllocationManagerTarok->getFreeRegionCount()) {
 			expandToSatisfy = true;
 		}
@@ -1079,7 +1081,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 double
 MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapChange)
 {
-	double gcOverheadWeight = 0.3; 
+	double gcOverheadWeight = 0.5; 
 	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
 	double freeMemComponant = mapMemoryPercentageToGcOverhead(env, heapChange);
 
@@ -1386,7 +1388,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, 
 
 	uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
-	if ((_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount) && _foundMaxFreeMemAfterGMP) {
+	if ((_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount) && (_foundMaxFreeMemAfterGMP || (0 == _extensions->globalVLHGCStats._heapSizingData.freeTenure))) {
 		/* Only expand if we didn't expand in last _extensions->heapExpansionStabilizationCount global collections */
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
 		uintptr_t heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
@@ -1451,8 +1453,8 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 
 	intptr_t suggestedChange = heapSizeChangeGranularity;
 
-	/* Aiming to expand the heap so that hybrid heap score is 0.2 below heapExpansionGCTimeThreshold, prevents head from expanding again due to noise */
-	double maxHybridOverheadScore = (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified - 0.20;
+	/* Aiming to expand the heap so that hybrid heap score is 0.1 below heapExpansionGCTimeThreshold, prevents head from expanding again due to noise */
+	double maxHybridOverheadScore = (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified - 0.1;
 	double minHybridOverheadScore = (double)_extensions->heapContractionGCTimeThreshold._valueSpecified;
 
 	/* Move the heap size in the right direction (expand/contract) to see what the memory overhead, and gc cpu overhead will be, until we find an acceptable change in heap size */

@@ -1322,6 +1322,16 @@ MM_IncrementalGenerationalGC::preProcessPGCUsingCopyForward(MM_EnvironmentVLHGC 
 
 	/* Record stats before a copy forward */
 	UDATA freeMemoryForSurvivor = _extensions->getHeap()->getActualFreeMemorySize();
+	/* 
+	 * In certain situations (eg, startup, change in allocation pattern, etc), the amount of free tenure might be overestimated.
+	 * This overestimate, can cause "tenure" to be too small, resulting in excessive GMP's or GCC's.
+	 * 
+	 * At this moment in time (right before copy forward), eden is 100% full, so all free memory is part of "tenure"
+	 * 
+	 * NOTE: A second estimate for free tenure is later made - The lowest estimate for free tenure is used in heap sizing calculations
+	 */
+	_extensions->globalVLHGCStats._heapSizingData.freeTenure = freeMemoryForSurvivor;
+
 	cycleState->_vlhgcIncrementStats._copyForwardStats._freeMemoryBefore = freeMemoryForSurvivor;
 	cycleState->_vlhgcIncrementStats._copyForwardStats._totalMemoryBefore = _extensions->getHeap()->getMemorySize();
 
