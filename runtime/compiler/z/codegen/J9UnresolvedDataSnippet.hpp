@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -56,20 +56,22 @@ namespace Z
 class UnresolvedDataSnippet : public J9::UnresolvedDataSnippet
    {
    /** _branchInstruction is actually the instruction which branch to the UDS. */
-   TR::Instruction     *_branchInstruction;
+   TR::Instruction         *_branchInstruction;
    TR::SymbolReference     *_dataSymbolReference;
-   TR::MemoryReference *_memoryReference;
+   TR::MemoryReference     *_memoryReference;
    bool                    _isStore;
+   
 
    /**
     *_dataReferenceInstruction is the instruction
     * that references it. The address of this will be resolved
     * when emitting the snippet code.
     */
-   TR::Instruction         *_dataReferenceInstruction;
-   TR::S390WritableDataSnippet *_unresolvedData;
-   uint8_t                    *_literalPoolPatchAddress;
-   uint8_t                    *_literalPoolSlot;         ///< For trace file generation
+   TR::Instruction               *_dataReferenceInstruction;
+   TR::S390WritableDataSnippet   *_unresolvedData;
+   uint8_t                       *_literalPoolPatchAddress;
+   uint8_t                       *_literalPoolSlot;         ///< For trace file generation
+   TR::Instruction               *_fenceNOPInst;
 
    public:
 
@@ -112,6 +114,9 @@ class UnresolvedDataSnippet : public J9::UnresolvedDataSnippet
    TR::MemoryReference *getMemoryReference() {return _memoryReference;}
    TR::MemoryReference *setMemoryReference(TR::MemoryReference *mr)
       {return _memoryReference = mr;}
+
+   TR::Instruction *getFenceNOPInstruction() { return _fenceNOPInst; }
+   TR::Instruction *setFenceNOPInstruction(TR::Instruction *instr) { return _fenceNOPInst = instr; }
 
    bool isInstanceData();
 
