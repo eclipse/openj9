@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1998, 2020 IBM Corp. and others
+ * Copyright (c) 1998, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -301,6 +301,17 @@ scarInit(J9JavaVM * vm)
 #if defined(J9VM_INTERP_MINIMAL_JCL)
 	result = standardInit(vm, J9_DLL_NAME);
 #else /* J9VM_INTERP_MINIMAL_JCL */
+#if defined(OSX) && (JAVA_SPEC_VERSION >= 16)
+	{
+		const char *osxsecurityStr = "osxsecurity";
+		result = vmFuncs->registerBootstrapLibrary(vm->mainThread, osxsecurityStr, (J9NativeLibrary**)&handle, FALSE);
+		if (J9NATIVELIB_LOAD_OK != result) {
+			PORT_ACCESS_FROM_JAVAVM(vm);
+			/* If library can not be found, print a warning and proceed anyway as this library is only required by certain applications. */
+			j9nls_printf(PORTLIB, J9NLS_WARNING, J9NLS_JCL_WARNING_DLL_COULDNOT_BE_REGISTERED_AS_BOOTSTRAP_LIB, osxsecurityStr, result);
+		}
+	}
+#endif /* defined(OSX) && (JAVA_SPEC_VERSION >= 16) */
 	result = (jint)vmFuncs->registerBootstrapLibrary( vm->mainThread, "java", (J9NativeLibrary**)&handle, FALSE);
 
 	if( result == 0 ) {

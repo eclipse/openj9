@@ -410,7 +410,7 @@ registerBootstrapLibrary(J9VMThread *vmThread, const char *libName, J9NativeLibr
 	char errorBuffer[512] = {0};
 	JavaVMInitArgs *vmInitArgs = (JavaVMInitArgs *) vmThread->javaVM->vmArgsArray->actualVMArgs;
 
-	Trc_VM_registerBootstrapLibrary_Entry(vmThread, libName, libraryPtr);
+	Trc_VM_registerBootstrapLibrary_Entry(vmThread, libName, NULL == libraryPtr ? NULL : *libraryPtr);
 	/* Look for the boot library path system property */
 	if (NULL != vmInitArgs) {
 		bootLibraryPath = getBootLibraryPath(vmInitArgs);
@@ -421,7 +421,7 @@ registerBootstrapLibrary(J9VMThread *vmThread, const char *libName, J9NativeLibr
 		PORT_ACCESS_FROM_VMC(vmThread);
 		j9tty_printf(PORTLIB, "<error: unable to load %s (%s)>\n", libName, errorBuffer);
 	}
-	Trc_VM_registerBootstrapLibrary_Exit(vmThread, libName, libraryPtr, result);
+	Trc_VM_registerBootstrapLibrary_Exit(vmThread, libName, NULL == libraryPtr ? NULL : *libraryPtr, result);
 
 	return result;
 }
