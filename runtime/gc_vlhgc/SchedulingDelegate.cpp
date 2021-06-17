@@ -107,6 +107,7 @@ MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapR
 	, _partialGcStartTime(0)
 	, _partialGcOverhead(0.00)
 	, _historicalPartialGCTime(0)
+	, _recentPartialGCTime(0)
 	, _globalMarkIncrementsTotalTime(0)
 	, _globalMarkIntervalStartTime(0)
 	, _globalMarkOverhead(0.0)
@@ -339,6 +340,9 @@ MM_SchedulingDelegate::calculateGlobalMarkIncrementTimeMillis(MM_EnvironmentVLHG
 	if(U_32_MAX < pgcTime) {
 		/* Time likely traveled backwards due to a clock adjustment - just ignore this round */
 	} else {
+
+		_recentPartialGCTime = pgcTime;
+
 		/* Prime or calculate the running weighted average for PGC times */
 		if (0 == _historicalPartialGCTime) {
 			_historicalPartialGCTime = pgcTime;
@@ -1460,13 +1464,14 @@ MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLH
 {
 	intptr_t edenRegionChange = 0;
 	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.05 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
-	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, 15);
+	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, 10);
 	/* By changing by at least 2 regions, it allows eden size to grow a bit faster (usually in startup phase when no Xmx was set, and there is only 1 eden region) */
 	edenChangeMagnitude = OMR_MAX(edenChangeMagnitude, 2);
 
-	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_historicalPartialGCTime, _partialGcOverhead, false);
+	/* Use _recentPartialGCTime instead of _historicalPartialGCTime here, since target pause time needs the immediate feedback which happens when eden (possibly) changes size */
+	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_recentPartialGCTime, _partialGcOverhead, false);
 
-	Trc_MM_SchedulingDelegate_calculateEdenChangeHeapNotFullyExpanded(env->getLanguageVMThread(), hybridEdenOverhead, (uintptr_t)_historicalPartialGCTime, mapPgcPauseOverheadToPgcCPUOverhead(env, (uintptr_t)_historicalPartialGCTime, false));
+	Trc_MM_SchedulingDelegate_calculateEdenChangeHeapNotFullyExpanded(env->getLanguageVMThread(), hybridEdenOverhead, (uintptr_t)_recentPartialGCTime, mapPgcPauseOverheadToPgcCPUOverhead(env, (uintptr_t)_recentPartialGCTime, false));
 	 
 	/* 
 	 * Aim to get hybrid PGC overhead between extensions->dnssExpectedTimeRatioMinimum and extensions->dnssExpectedTimeRatioMaximum 

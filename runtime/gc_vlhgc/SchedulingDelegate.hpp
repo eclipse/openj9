@@ -85,6 +85,7 @@ private:
 	uint64_t _partialGcStartTime;  /**< Start time of the in progress Partial GC in hi-resolution format (recorded to track total time spent in Partial GC) */
 	double _partialGcOverhead; /**< Used to keep track of relative Partial GC overhead. Is calculated by dividing total time spent in a single PGC phase, by the time interval since the end of the previous PGC */
 	uint64_t _historicalPartialGCTime;  /**< Weighted historical average of Partial GC times, measured in ms */
+	uint64_t _recentPartialGCTime; /**< Most recent PGC time, measured in ms */
 
 	uint64_t _globalMarkIncrementsTotalTime; /**< Agregate of time spent doing GMP increments for current phase */
 	uint64_t _globalMarkIntervalStartTime; /**< Time interval between start of sucessive GMP increments */

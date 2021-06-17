@@ -1081,7 +1081,7 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 double
 MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapChange)
 {
-	double gcOverheadWeight = 0.5; 
+	double gcOverheadWeight = 0.4; 
 	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
 	double freeMemComponant = mapMemoryPercentageToGcOverhead(env, heapChange);
 
