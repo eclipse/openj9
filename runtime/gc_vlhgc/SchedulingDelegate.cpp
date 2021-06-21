@@ -60,6 +60,7 @@ const double measureScanRateHistoricWeightForPGC = 0.95;
 const double partialGCTimeHistoricWeight = 0.50;
 const double incrementalScanTimePerGMPHistoricWeight = 0.50;
 const double bytesScannedConcurrentlyPerGMPHistoricWeight = 0.50;
+const double concurrentGMPWorkWeight = 0.5;
 const uintptr_t minimumPgcTime = 5;
 const uintptr_t consecutivePGCToChangeEden = 16;
 
@@ -185,8 +186,8 @@ MM_SchedulingDelegate::calculateGlobalMarkOverhead(MM_EnvironmentVLHGC *env) {
 	uint64_t globalMarkIntervalEndTime = j9time_hires_clock();
 	uint64_t globalMarkIntervalTime = j9time_hires_delta(_globalMarkIntervalStartTime, globalMarkIntervalEndTime, J9PORT_TIME_DELTA_IN_MICROSECONDS);
 
-	/* Determine the time cost we attribute to concurrent GMP work from previous cycle */
-	uint64_t concurrentCostUs = _concurrentMarkGCThreadsTotalWorkTime / 1000;
+	/* Determine the cost we attribute to concurrent GMP work from previous cycle. Since mutator threads might have been idle, reduce weight of concurrent GMP work by a factor of gmpConcurrentCostWeight */
+	uint64_t concurrentCostUs = (_concurrentMarkGCThreadsTotalWorkTime / 1000) * concurrentGMPWorkWeight;
 
 	/* Total GMP work time, is time taken for all increments + the time we attribute for concurrent GC parts of GMP, and global sweep time. */
 	uint64_t potentialGMPWorkTime =  _globalMarkIncrementsTotalTime + _globalSweepTimeUs + concurrentCostUs;
@@ -1352,9 +1353,12 @@ MM_SchedulingDelegate::calculateEdenSize(MM_EnvironmentVLHGC *env)
 		/* Eden will inform the total heap resizing logic, that it needs to change total heap size in order to maintain same "tenure" size */
 		maxEdenChange = maxHeapExpansionRegions;
 		intptr_t edenChangeWithSurvivorHeadroom = desiredEdenChangeSize;
+		/* Total heap needs to be aware that by changing eden size, the amount of survivor space might also need to change */
 		if (0 < desiredEdenChangeSize) {
-			/* Total heap needs to be aware that by increasing eden size, the amount of survivor space should also increase */
 			edenChangeWithSurvivorHeadroom = desiredEdenChangeSize + (intptr_t)ceil(((double)desiredEdenChangeSize * _edenSurvivalRateCopyForward));
+		} else if ((0 > desiredEdenChangeSize) && (16 < _edenRegionCount)) {
+			/* Only factor adjusting in survivor regions for total heap resizing when eden is not very small. Factoring in survivor regions when eden is tiny can lead to poor performance, particularly during startup */
+			edenChangeWithSurvivorHeadroom = desiredEdenChangeSize + (intptr_t)floor(((double)desiredEdenChangeSize * _edenSurvivalRateCopyForward));
 		}
 		_extensions->globalVLHGCStats._heapSizingData.edenRegionChange = OMR_MIN(maxEdenChange, edenChangeWithSurvivorHeadroom);
 	}
