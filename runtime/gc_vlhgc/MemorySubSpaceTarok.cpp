@@ -980,10 +980,14 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		_foundMaxFreeMemAfterGMP = true;
 	}
 
+	Trc_MM_MemorySubSpaceTarok_checkResize_1(env->getLanguageVMThread(), _searchingForMaxFreeMemAfterGmp ? "true" : "false", _foundMaxFreeMemAfterGMP ? "true" : "false");
+
 	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
 	intptr_t edenChangeRegions = _extensions->globalVLHGCStats._heapSizingData.edenRegionChange;
 	intptr_t edenChangeRegionsBytes = edenChangeRegions * (intptr_t)_heapRegionManager->getRegionSize();
+
+	Trc_MM_MemorySubSpaceTarok_checkResize_2(env->getLanguageVMThread(), heapSizeChange, edenChangeRegionsBytes);
 
 	if (0 == heapSizeChange) {
 		if (edenChangeRegionsBytes < 0) {
