@@ -601,15 +601,9 @@ MM_SchedulingDelegate::estimateMacroDefragmentationWork(MM_EnvironmentVLHGC *env
 void
 MM_SchedulingDelegate::updateCurrentMacroDefragmentationWork(MM_EnvironmentVLHGC *env, MM_HeapRegionDescriptorVLHGC *region)
 {
-<<<<<<< db526a5fa88bac9f84bec07dab5b7ac3a4db3470
 	MM_MemoryPool *memoryPool = region->getMemoryPool();
-	UDATA freeMemory = memoryPool->getFreeMemoryAndDarkMatterBytes();
-	UDATA liveData = _regionManager->getRegionSize() - freeMemory;
-=======
-	MM_MemoryPoolBumpPointer *memoryPool = (MM_MemoryPoolBumpPointer *)region->getMemoryPool();
 	uintptr_t freeMemory = memoryPool->getFreeMemoryAndDarkMatterBytes();
 	uintptr_t liveData = _regionManager->getRegionSize() - freeMemory;
->>>>>>> Refactor 3 files with standard integer types
 
 	double bytesDiscardedPerByteCopied = (_averageCopyForwardBytesCopied > 0.0) ? (_averageCopyForwardBytesDiscarded / _averageCopyForwardBytesCopied) : 0.0;
 	uintptr_t estimatedFreeMemoryDiscarded = (uintptr_t)(liveData * bytesDiscardedPerByteCopied);
