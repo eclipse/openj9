@@ -989,13 +989,31 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 
 	Trc_MM_MemorySubSpaceTarok_checkResize_2(env->getLanguageVMThread(), heapSizeChange, edenChangeRegionsBytes);
 
-	if (0 == heapSizeChange) {
-		if (edenChangeRegionsBytes < 0) {
-			/* Heap is only contracting because eden is shrinking */
-			_extensions->heap->getResizeStats()->setLastContractReason(EDEN_CONTRACTING);
-		} else if (edenChangeRegionsBytes > 0) {
-			/* Heap is only expanding because eden is expanding */
+	ExpandReason nonEdenHeapLastExpandReason = _extensions->heap->getResizeStats()->getLastExpandReason();
+	ContractReason nonEdenHeapLastContractReason = _extensions->heap->getResizeStats()->getLastContractReason();
+
+	if (edenChangeRegionsBytes != 0) {
+		/* 
+		 * Report eden sizing by itself, as well as why eden is being resized.
+		 * When contract/expand is actually performed, VGC will report the -overall- change in heap size, and report it accordingly.
+		 * This -overall- change in heap size, is change in eden size + change in non-eden size 
+		 */
+		if (edenChangeRegionsBytes > 0) {
 			_extensions->heap->getResizeStats()->setLastExpandReason(EDEN_EXPANDING);
+			reportHeapResizeAttempt(env, edenChangeRegionsBytes, HEAP_EXPAND, MEMORY_TYPE_NEW);
+		} else if (edenChangeRegionsBytes < 0) {
+			_extensions->heap->getResizeStats()->setLastContractReason(EDEN_CONTRACTING);
+			reportHeapResizeAttempt(env, edenChangeRegionsBytes, HEAP_CONTRACT, MEMORY_TYPE_NEW);
+		}
+
+		/* 
+		 * Now that eden resizing has been reported, revert back to previous expand/contract reasons if non-eden sizing logic set any. 
+		 * This makes sure that when VGC reports total heap size change, the reason that is used is non-eden resizing reason, instead of repeating eden sizing resize reason 
+		 */
+		if (heapSizeChange > 0) {
+			_extensions->heap->getResizeStats()->setLastExpandReason(nonEdenHeapLastExpandReason);
+		} else if (heapSizeChange < 0) {
+			_extensions->heap->getResizeStats()->setLastContractReason(nonEdenHeapLastContractReason);
 		}
 	}
 
@@ -1003,10 +1021,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 	heapSizeChange += edenChangeRegionsBytes;
 
 	if (_foundMaxFreeMemAfterGMP) {
-		/*
-		 * Heap sizing logic was given the chance to expand due to free memory constraints. Reset values which help track when the maximum free heap space has been reached.
-		 * Note: Heap contraction can occur at any time, wheras heap expansion should only occur at GMP endpoints
-		 */
+		/* Heap sizing logic was given the chance to expand due to free memory constraints. Reset values which help track when the maximum free heap space has been reached. */
 		_freeMemoryOnLastPGC = 0;
 		_foundMaxFreeMemAfterGMP = false;
 	}
