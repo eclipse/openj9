@@ -1029,8 +1029,13 @@ MM_SchedulingDelegate::updateHeapSizingData(MM_EnvironmentVLHGC *env)
 	if (_extensions->globalVLHGCStats._heapSizingData.reservedSize + _liveSetBytesAfterPartialCollect < totalHeapSize) {
 		uintptr_t freeTenureEstimate = totalHeapSize - _extensions->globalVLHGCStats._heapSizingData.reservedSize - _liveSetBytesAfterPartialCollect;
 		uintptr_t freeTenureEstimateFromBeforePgc = _extensions->globalVLHGCStats._heapSizingData.freeTenure;
-		/* Free tenure was also recorded right before PGC. Use the lower of the two estimates for later calculations */
-		_extensions->globalVLHGCStats._heapSizingData.freeTenure = OMR_MIN(freeTenureEstimateFromBeforePgc, freeTenureEstimate);
+
+		/* 
+		 * Until a GMP occurs, and _estimatedFreeTenure is set, use the most conservative estimate between the free tenure estimate recorded before a PGC, 
+		 * and a free tenure estimate made by looking at live data after PGC. Neither of these two methods is as precise _estimatedFreeTenure, 
+		 * but until GMP occurs, one of those two estimates must be used for purposes of heap resizing (Note: the minimum of the two values is used, so that heap more likely to expand)
+		 */
+		_extensions->globalVLHGCStats._heapSizingData.freeTenure = _estimatedFreeTenure != 0 ? _estimatedFreeTenure : OMR_MIN(freeTenureEstimateFromBeforePgc, freeTenureEstimate);
 	} else {
 		/* Certain edge cases (usually in startup) the total heap might be too small for eden + survivor, and the live set, so free tenure is effectively 0 */
 		_extensions->globalVLHGCStats._heapSizingData.freeTenure = 0;

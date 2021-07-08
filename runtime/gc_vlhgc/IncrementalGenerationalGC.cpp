@@ -1139,6 +1139,7 @@ MM_IncrementalGenerationalGC::runGlobalMarkPhaseIncrement(MM_EnvironmentVLHGC *e
 		/* Remember how many PGC's occured per GMP cycle, so that we can weight GMP cost properly */
 		_extensions->globalVLHGCStats._previousPgcPerGmpCount = _schedulingDelegate.getPgcCountSinceGMPEnd(env);
 		_schedulingDelegate.globalMarkCycleEnd(env);
+		_extensions->globalVLHGCStats._heapSizingData.readyToResize = true;
 		/* clear new OwnableSynchronizerObject count after scanOwnableSynchronizerObject in clearable phase */
 		_extensions->allocationStats.clearOwnableSynchronizer();
 	} else {
@@ -1230,6 +1231,7 @@ MM_IncrementalGenerationalGC::runGlobalGarbageCollection(MM_EnvironmentVLHGC *en
 	env->_cycleState->_markMap = NULL;
 	env->_cycleState->_currentIncrement = 0;
 
+	_extensions->globalVLHGCStats._heapSizingData.readyToResize = true;
 	if (attemptHeapResize(env, allocDescription)) {
 		/* Check was it successful contraction */
 		if (env->_cycleState->_activeSubSpace->wasContractedThisGC(_extensions->globalVLHGCStats.gcCount)) {

@@ -61,12 +61,7 @@ private:
 	MM_HeapRegionManager *_heapRegionManager;	/**< Stored so that we can resolve the table descriptor for given addresses when asked for a pool corresponding to a specific address */
 	MM_LightweightNonReentrantLock _expandLock; /**< Most of the common expand code is not multi-threaded safe (since it used in standard collectors on alloc path fail path which is single threaded)  */
 	double _lastObservedGcPercentage; /**< The most recently observed GC percentage (time gc is active / time gc is not active) */
-	uint64_t _previouslyObservedPGCCount; /**< The count of observed PGC's since the last GMP cycle - Used to determine if heap resize occured after a system/global gc */
 	
-	uintptr_t _freeMemoryOnLastPGC; /**< The observed total heap free memory during the last PGC */
-	bool _searchingForMaxFreeMemAfterGmp; /**< set to true if there might be additional memory can still be reclaimed PGC's after the latest GMP cycle */
-	bool _foundMaxFreeMemAfterGMP; /**< set to true if the free memory in the heap has reached it's maximum since the last GMP cycle ended */
-
 protected:
 public:
 	
@@ -315,9 +310,6 @@ public:
 		, _bytesRemainingBeforeTaxation(0)
 		, _heapRegionManager(heapRegionManager)
 		, _lastObservedGcPercentage(0)
-		, _freeMemoryOnLastPGC(1)
-		, _searchingForMaxFreeMemAfterGmp(true)
-		, _foundMaxFreeMemAfterGMP(false)
 	{
 		_typeId = __FUNCTION__;
 	}
