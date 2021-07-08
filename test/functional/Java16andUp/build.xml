@@ -87,6 +87,7 @@
 		<javac srcdir="${src}" destdir="${build}" debug="true" fork="true" executable="${compiler.javac}" includeAntRuntime="false" encoding="ISO-8859-1">
 			<src path="${src}"/>
 			<exclude name="**/modules/**" />
+			<compilerarg line='--add-modules jdk.incubator.foreign' />
 			<compilerarg line='--add-exports java.base/jdk.internal.misc=ALL-UNNAMED' />
 			<compilerarg line='--enable-preview --source ${JDK_VERSION}' />
 			<classpath>
