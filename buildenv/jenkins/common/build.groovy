@@ -288,9 +288,11 @@ def build() {
     }
     stage('Java Version') {
         dir(OPENJDK_CLONE_DIR) {
-            sh "build/$RELEASE/images/$JDK_FOLDER/bin/java -Xjit -version"
+            sh "build/$RELEASE/images/$JDK_FOLDER/bin/java -Xjit -XshowSettings:properties -version"
+            sh "build/$RELEASE/images/$JDK_FOLDER/bin/java -Xinternalversion -version"
         }
     }
+    error('stop here')
 }
 
 def archive_sdk() {
