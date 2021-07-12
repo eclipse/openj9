@@ -61,7 +61,15 @@ const double partialGCTimeHistoricWeight = 0.50;
 const double incrementalScanTimePerGMPHistoricWeight = 0.50;
 const double bytesScannedConcurrentlyPerGMPHistoricWeight = 0.50;
 const double concurrentGMPWorkWeight = 0.5;
+const double pgcCpuOverheadWeight = 0.5;
+const double pgcIntervalHistoricWeight = 0.5;
+const double pgcOverheadHistoricWeight = 0.5;
+const double gcOverheadImprovementHighPassFilter = 0.975;
+const double edenChangePctHeapNotFullyExpanded = 0.05;
+const uintptr_t minimumEdenRegionChangeHeapNotFullyExpanded = 2;
+const uintptr_t maximumEdenRegionChangeHeapNotFullyExpanded = 10;
 const uintptr_t minimumPgcTime = 5;
+const uintptr_t minimumEdenRegionsToConsiderSurvivorRegions = 16;
 const uintptr_t consecutivePGCToChangeEden = 16;
 
 MM_SchedulingDelegate::MM_SchedulingDelegate (MM_EnvironmentVLHGC *env, MM_HeapRegionManager *manager)
@@ -287,7 +295,6 @@ MM_SchedulingDelegate::partialGarbageCollectStarted(MM_EnvironmentVLHGC *env)
 
 	/* Don't count the very first PGC */
 	if (0 != _partialGcStartTime) {
-		double pgcIntervalHistoricWeight = 0.5;
 		uint64_t recentPgcInterval = j9time_hires_delta(_partialGcStartTime, j9time_hires_clock(), J9PORT_TIME_DELTA_IN_MICROSECONDS);
 		_averagePgcInterval = (uintptr_t)(pgcIntervalHistoricWeight * _averagePgcInterval) + (uintptr_t)((1- pgcIntervalHistoricWeight) * recentPgcInterval);
 	}
@@ -306,7 +313,7 @@ MM_SchedulingDelegate::calculatePartialGarbageCollectOverhead(MM_EnvironmentVLHG
 	}
 	
 	double recentOverhead = (double)(_historicalPartialGCTime * 1000)/_averagePgcInterval;
-	_partialGcOverhead = MM_Math::weightedAverage(_partialGcOverhead, recentOverhead, 0.5);
+	_partialGcOverhead = MM_Math::weightedAverage(_partialGcOverhead, recentOverhead, pgcOverheadHistoricWeight);
 	
 	Trc_MM_SchedulingDelegate_calculatePartialGarbageCollectOverhead(env->getLanguageVMThread(), _partialGcOverhead, _averagePgcInterval/1000, _historicalPartialGCTime);
 }
@@ -722,7 +729,7 @@ MM_SchedulingDelegate::calculateRecommendedEdenChangeForExpandedHeap(MM_Environm
 	 * In order to prevent very minor fluctuations in eden size, which don't result in significant performance improvements, 
 	 * apply a high pass filter - so that only large enough improvements result in eden changing size
 	 */
-	double hybridOverheadRequiredToChangeEden = currentEdenHybridOverhead * 0.975;
+	double hybridOverheadRequiredToChangeEden = currentEdenHybridOverhead * gcOverheadImprovementHighPassFilter;
 
 	/* How large the hops (in bytes) between samples should be */
 	uintptr_t samplingGranularity = (uintptr_t)(maxEdenChange - minEdenChange) / numberOfSamples;
@@ -1466,10 +1473,10 @@ intptr_t
 MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLHGC *env)
 {
 	intptr_t edenRegionChange = 0;
-	intptr_t edenChangeMagnitude = (intptr_t)ceil((0.05 * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
-	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, 10);
+	intptr_t edenChangeMagnitude = (intptr_t)ceil((edenChangePctHeapNotFullyExpanded * getIdealEdenSizeInBytes(env)) / _regionManager->getRegionSize());
+	edenChangeMagnitude = OMR_MIN(edenChangeMagnitude, (intptr_t)maximumEdenRegionChangeHeapNotFullyExpanded);
 	/* By changing by at least 2 regions, it allows eden size to grow a bit faster (usually in startup phase when no Xmx was set, and there is only 1 eden region) */
-	edenChangeMagnitude = OMR_MAX(edenChangeMagnitude, 2);
+	edenChangeMagnitude = OMR_MAX(edenChangeMagnitude, (intptr_t)minimumEdenRegionChangeHeapNotFullyExpanded);
 
 	/* Use _recentPartialGCTime instead of _historicalPartialGCTime here, since target pause time needs the immediate feedback which happens when eden (possibly) changes size */
 	double hybridEdenOverhead = calculateHybridEdenOverhead(env, (uintptr_t)_recentPartialGCTime, _partialGcOverhead, false);
@@ -1478,7 +1485,7 @@ MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLH
 	 
 	/* 
 	 * Aim to get hybrid PGC overhead between extensions->dnssExpectedTimeRatioMinimum and extensions->dnssExpectedTimeRatioMaximum 
-	 * by increasing or decreasing eden by 10% 
+	 * by increasing or decreasing eden by edenChangePctHeapNotFullyExpanded
 	 */
 	if (_extensions->dnssExpectedTimeRatioMinimum._valueSpecified > hybridEdenOverhead ) {
 		/* Shrink eden a bit */
@@ -1494,9 +1501,10 @@ double
 MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, bool heapFullyExpanded) {
 	
 	/* Convert expectedTimeRatioMinimum/Maximum to 0-100 based for this formula */
-	double xminpct = _extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
-	double xmaxpct = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
-	double targetPauseTimeMs = (double)_extensions->tarokTargetMaxPauseTime;
+	const double xminpct = _extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
+	const double xmaxpct = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
+	const double targetPauseTimeMs = (double)_extensions->tarokTargetMaxPauseTime;
+	const double pauseTimeTooHighOverheadLogBase = 1.0156;
 
 	double overhead = 0.0;
 
@@ -1516,7 +1524,7 @@ MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *
 			 * If pgc time is only slightly above tarokTargetMaxPauseTime, then there is only a very small overhead penalty, 
 			 * wheras being 2x higher than the target pause time leads to a significantly bigger penalty.
 			 */
-			double overheadCurve = pow(1.0156, ((double)pgcPauseTimeMs - targetPauseTimeMs)) + midpointPct - 1;
+			double overheadCurve = pow(pauseTimeTooHighOverheadLogBase, ((double)pgcPauseTimeMs - targetPauseTimeMs)) + midpointPct - 1;
 			overhead = OMR_MIN(100.0, overheadCurve);
 		}
 		
@@ -1555,7 +1563,6 @@ MM_SchedulingDelegate::calculateHybridEdenOverhead(MM_EnvironmentVLHGC *env, uin
 	 * By mapping a pgc time to a corresponding overhead (% of time gc is active relative to mutator), eden sizing logic can make a decision as to whether 
 	 * it wants to contract/expand, based on how much it will change the overhead and pgc times.
 	 */
-	double pgcCpuOverheadWeight = 0.5;
 	double pgcTimeOverhead = mapPgcPauseOverheadToPgcCPUOverhead(env, pgcPauseTimeMs, heapFullyExpanded);
 	double hybridEdenOverheadHundredBased = MM_Math::weightedAverage(overhead * 100, pgcTimeOverhead, pgcCpuOverheadWeight);
 	return hybridEdenOverheadHundredBased / 100;

@@ -56,6 +56,7 @@
 
 #define HEAP_FREE_RATIO_EXPAND_DIVISOR		100
 #define HEAP_FREE_RATIO_EXPAND_MULTIPLIER	17
+#define GMP_OVERHEAD_WEIGHT					0.4
 
 /**
  * Return the memory pool associated to the receiver.
@@ -955,7 +956,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 {
 	uintptr_t oldVMState = env->pushVMstate(OMRVMSTATE_GC_CHECK_RESIZE);
 
-	Trc_MM_MemorySubSpaceTarok_checkResize_1(env->getLanguageVMThread(), _extensions->globalVLHGCStats._heapSizingData.readyToResize ? "true" : "false");
+	Trc_MM_MemorySubSpaceTarok_checkResize_1(env->getLanguageVMThread(), _extensions->globalVLHGCStats._heapSizingData.readyToResizeAtGlobalEnd ? "true" : "false");
 
 	intptr_t heapSizeChange = calculateHeapSizeChange(env, allocDescription, _systemGC);
 
@@ -1006,7 +1007,7 @@ MM_MemorySubSpaceTarok::checkResize(MM_EnvironmentBase *env, MM_AllocateDescript
 		_expansionSize = 0;
 	}
 
-	_extensions->globalVLHGCStats._heapSizingData.readyToResize = false;
+	_extensions->globalVLHGCStats._heapSizingData.readyToResizeAtGlobalEnd = false;
 
 	env->popVMstate(oldVMState);
 }
@@ -1047,9 +1048,9 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 	
 	/* Based on the hybrid overhead of gc cpu, and free memory, decide if heap should expand or contract */
 	if ((hybridHeapScore > (double)_extensions->heapExpansionGCTimeThreshold._valueSpecified) || expandToSatisfy) {
-		/* Try to expand the heap */
+		/* Try to expand the heap. Note: We enter this block even if readyToResizeAtGlobalEnd might be false, since expansion might be necessary if free space is very small and allocation failure will occur */
 		sizeChange = (intptr_t)calculateExpansionSize(env, allocDescription, _systemGC, expandToSatisfy, sizeInRegionsRequired);
-	} else if (hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) {
+	} else if ((hybridHeapScore < (double)_extensions->heapContractionGCTimeThreshold._valueSpecified) && _extensions->globalVLHGCStats._heapSizingData.readyToResizeAtGlobalEnd) {
 		/* Try to contract the heap */
 		sizeChange = calculateContractionSize(env, allocDescription, _systemGC, true);
 	}
@@ -1069,7 +1070,6 @@ MM_MemorySubSpaceTarok::calculateHeapSizeChange(MM_EnvironmentBase *env, MM_Allo
 double
 MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, intptr_t heapChange)
 {
-	double gcOverheadWeight = 0.4; 
 	double gcPercentage = calculateGcPctForHeapChange(env, heapChange);
 	double freeMemComponant = mapMemoryPercentageToGcOverhead(env, heapChange);
 
@@ -1077,45 +1077,59 @@ MM_MemorySubSpaceTarok::calculateHybridHeapOverhead(MM_EnvironmentBase *env, int
 		/* Do not trigger this tracepoint for heapChange != 0, since this function is run dozens of time when changing heap size */
 		Trc_MM_MemorySubSpaceTarok_calculateHybridHeapOverhead(env->getLanguageVMThread(), gcPercentage, freeMemComponant);
 	}
-	return MM_Math::weightedAverage(gcPercentage, freeMemComponant, gcOverheadWeight);
+	return MM_Math::weightedAverage(gcPercentage, freeMemComponant, GMP_OVERHEAD_WEIGHT);
 }
 
 double MM_MemorySubSpaceTarok::mapMemoryPercentageToGcOverhead(MM_EnvironmentBase *env, intptr_t heapSizeChange)
 {	
+	double memoryScore = 0.0;
+
 	/* At this point, eden is full, so all the free space is all part of tenure */
 	uintptr_t tenureSize = getActiveMemorySize() - (uintptr_t)_extensions->globalVLHGCStats._heapSizingData.reservedSize;
 	uintptr_t freeTenure = (uintptr_t)_extensions->globalVLHGCStats._heapSizingData.freeTenure;
 
+	if (0 == heapSizeChange) {
+		Trc_MM_MemorySubSpaceTarok_mapMemoryPercentageToGcOverhead_1(env->getLanguageVMThread(), tenureSize, freeTenure);
+	}
+	
 	if (tenureSize < freeTenure) {
 		/* 
 		 * In certain edge cases (usually in startup), "tenure" is measured slightly innacuratly (due to dynamics of survivor space), resulting in free tenure memory being innacurate. 
 		 * Counter-intuitively, free tenure memory here is very small, so suggest expansion 
 		 */
-		return 2 * _extensions->heapExpansionGCTimeThreshold._valueSpecified;
+		memoryScore = 2 * _extensions->heapExpansionGCTimeThreshold._valueSpecified;
+
+	} else {
+
+		intptr_t newFreeTenureSize = (intptr_t)freeTenure + heapSizeChange;
+		intptr_t newTotalMemorySize = (intptr_t)tenureSize + heapSizeChange;
+		double freeMemoryRatio = ((double)newFreeTenureSize/ (double)newTotalMemorySize) * 100;
+		if (0 != heapSizeChange) {
+			Trc_MM_MemorySubSpaceTarok_mapMemoryPercentageToGcOverhead_2(env->getLanguageVMThread(), heapSizeChange, freeMemoryRatio);
+		}
+
+		if ((0 == freeMemoryRatio) || (0 >= newTotalMemorySize) || (0 >= newFreeTenureSize)) {
+			/* The heap size change will result in no free memory left - return a very high score, suggesting expansion */
+			memoryScore = 100.0;
+		} else {
+			uintptr_t xminf = _extensions->heapFreeMinimumRatioMultiplier;
+			uintptr_t xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
+			uintptr_t xmint = _extensions->heapContractionGCTimeThreshold._valueSpecified;
+			uintptr_t xmaxt = _extensions->heapExpansionGCTimeThreshold._valueSpecified;
+
+			double freeSpaceToGcPctRatio = (double)(xmaxt - xmint) / (xmaxf - xminf);
+
+			double linearMemoryScore = xmaxt - ((freeMemoryRatio - xminf) *  freeSpaceToGcPctRatio);
+
+			/* Adjust the weight for when free memory is low - the function maps to a higher gc cpu overhead (suggesting expansion) */
+			double adjustedMemoryScore = linearMemoryScore * ( (freeMemoryRatio + 10) / freeMemoryRatio);
+
+			memoryScore = OMR_MAX(adjustedMemoryScore, 0);
+		}
 	}
 
-	intptr_t newFreeTenureSize = (intptr_t)freeTenure + heapSizeChange;
-	intptr_t newTotalMemorySize = (intptr_t)tenureSize + heapSizeChange;
-	double freeMemoryRatio = ((double)newFreeTenureSize/ (double)newTotalMemorySize) * 100;
+	Trc_MM_MemorySubSpaceTarok_mapMemoryPercentageToGcOverhead_3(env->getLanguageVMThread(), memoryScore);
 
-	if ((0 == freeMemoryRatio) || (0 >= newTotalMemorySize) || (0 >= newFreeTenureSize)) {
-		/* The heap size change will result in no free memory left - return a very high score, suggesting expansion */
-		return 100.0;
-	}
-
-	uintptr_t xminf = _extensions->heapFreeMinimumRatioMultiplier;
-	uintptr_t xmaxf = _extensions->heapFreeMaximumRatioMultiplier;
-	uintptr_t xmint = _extensions->heapContractionGCTimeThreshold._valueSpecified;
-	uintptr_t xmaxt = _extensions->heapExpansionGCTimeThreshold._valueSpecified;
-
-	double freeSpaceToGcPctRatio = (double)(xmaxt - xmint) / (xmaxf - xminf);
-
-	double linearMemoryScore = xmaxt - ((freeMemoryRatio - xminf) *  freeSpaceToGcPctRatio);
-
-	/* Adjust the weight for when free memory is low - the function maps to a higher gc cpu overhead (suggesting expansion) */
-	double adjustedMemoryScore = linearMemoryScore * ( (freeMemoryRatio + 10) / freeMemoryRatio);
-
-	double memoryScore = OMR_MAX(adjustedMemoryScore, 0);
 	return memoryScore;
 }
 
@@ -1202,7 +1216,7 @@ MM_MemorySubSpaceTarok::calculateContractionSize(MM_EnvironmentBase *env, MM_All
 	 * If not, we only entered this function in attempts to respect -Xsoftmx, and should skip this block entirely
 	 */
 	uintptr_t contractSize = 0;
-	if (shouldIncreaseHybridHeapScore || _extensions->globalVLHGCStats._heapSizingData.readyToResize) {
+	if (shouldIncreaseHybridHeapScore || _extensions->globalVLHGCStats._heapSizingData.readyToResizeAtGlobalEnd) {
 		contractSize = calculateTargetContractSize(env, allocSize);
 	}
 	
@@ -1379,7 +1393,7 @@ MM_MemorySubSpaceTarok::calculateExpansionSizeInternal(MM_EnvironmentBase *env, 
 
 	uintptr_t gcCount = _extensions->globalVLHGCStats.gcCount;
 
-	if ((_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount) && (_extensions->globalVLHGCStats._heapSizingData.readyToResize || (0 == _extensions->globalVLHGCStats._heapSizingData.freeTenure))) {
+	if ((_extensions->heap->getResizeStats()->getLastHeapExpansionGCCount() + _extensions->heapExpansionStabilizationCount <= gcCount) && (_extensions->globalVLHGCStats._heapSizingData.readyToResizeAtGlobalEnd || (0 == _extensions->globalVLHGCStats._heapSizingData.freeTenure))) {
 		/* Only expand if we didn't expand in last _extensions->heapExpansionStabilizationCount global collections */
 		/* Note that the gcCount includes System GCs, PGCs, AFs and GMP increments */
 		uintptr_t heapSizeWithinGoodHybridRange = getHeapSizeWithinBounds(env);
@@ -1428,6 +1442,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 {
 	double currentHybridHeapScore = calculateCurrentHybridHeapOverhead(env);
 	uintptr_t recommendedHeapSize = getActiveMemorySize();
+	double maxHeapDeviation = 0.25;
 
 	/* 
 	 * If the hybrid overhead is too high, we attempt to bring it back down to an acceptable level. 
@@ -1440,7 +1455,8 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 	bool foundAcceptableHeapSizeChange = false;
 	/* in order to decrease the hybrid overhead, we need to expand the heap. Conversely, to increase hybrid overhead, we contract the heap  */
 	intptr_t heapSizeChangeGranularity = hybridOverheadTooHigh ? (intptr_t)_heapRegionManager->getRegionSize() : (-1 * (intptr_t)_heapRegionManager->getRegionSize());
-	uintptr_t maxHeapExpansion = (uintptr_t)(1.25 * (double)recommendedHeapSize);
+	uintptr_t maxHeapExpansion = (uintptr_t)((1 + maxHeapDeviation) * (double)recommendedHeapSize);
+	uintptr_t maxHeapContraction = (uintptr_t)(_extensions->globalVLHGCStats._heapSizingData.freeTenure * maxHeapDeviation);
 
 	intptr_t suggestedChange = heapSizeChangeGranularity;
 
@@ -1461,7 +1477,7 @@ MM_MemorySubSpaceTarok::getHeapSizeWithinBounds(MM_EnvironmentBase *env)
 			 * Leave headroom for free tenure (ie. do not contract by more than 25% of current free tenure space)
 			 * This is both to remain symetric with max expansion of 25%, and to prevent overly aggressive contraction
 			 */
-			if ((suggestedChange * -1) >= (intptr_t)_extensions->globalVLHGCStats._heapSizingData.freeTenure * 0.25) {
+			if ((suggestedChange * -1) >= (intptr_t)maxHeapContraction) {
 				break;
 			}
 		}
