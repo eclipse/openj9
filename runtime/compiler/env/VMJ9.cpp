@@ -2900,6 +2900,12 @@ bool TR_J9VMBase::supressInliningRecognizedInitialCallee(TR_CallSite* callsite, 
                dontInlineRecognizedMethod = true;
                }
             break;
+         case TR::java_lang_StringLatin1_inflate:
+            if (comp->cg()->getSupportsInlineStringLatin1Inflate())
+               {
+               dontInlineRecognizedMethod = true;
+               }
+            break;
          case TR::com_ibm_jit_JITHelpers_toUpperIntrinsicLatin1:
          case TR::com_ibm_jit_JITHelpers_toLowerIntrinsicLatin1:
          case TR::com_ibm_jit_JITHelpers_toUpperIntrinsicUTF16:

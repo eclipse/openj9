@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2020 IBM Corp. and others
+ * Copyright (c) 2000, 2021 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -153,6 +153,7 @@ class OMR_EXTENSIBLE TreeEvaluator: public J9::TreeEvaluator
    static TR::Register *fwrtbariEvaluator(TR::Node *node, TR::CodeGenerator *cg);
    static TR::Register *awrtbarEvaluator(TR::Node *node, TR::CodeGenerator *cg);
    static TR::Register *awrtbariEvaluator(TR::Node *node, TR::CodeGenerator *cg);
+   static TR::Register *inlineStringLatin1Inflate(TR::Node *node, TR::CodeGenerator *cg);
    static TR::Register *generateConcurrentScavengeSequence(TR::Node *node, TR::CodeGenerator *cg);
 
    class CaseConversionManager;
