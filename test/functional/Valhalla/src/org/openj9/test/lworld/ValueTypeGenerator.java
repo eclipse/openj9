@@ -42,6 +42,7 @@ public class ValueTypeGenerator extends ClassLoader {
 	public static final int DEFAULTVALUE = 203;
 	public static final int WITHFIELD = 204;
 	private static final int ACC_VALUE_TYPE = 0x100;
+	public static final int ACC_ATOMIC = 0x40;
 	
 	static {
 		generator = new ValueTypeGenerator();
@@ -193,6 +194,7 @@ public class ValueTypeGenerator extends ClassLoader {
 		String superName = config.getSuperName();
 		String[] fields = config.getFields();
 		int extraClassFlags = config.getExtraClassFlags();
+		int classFileVersion = 61;
 
 		String nestHost = config.getNestHost();
 
@@ -214,9 +216,9 @@ public class ValueTypeGenerator extends ClassLoader {
 		String classFileName = className + ".class";
 
 		if (isRef) {
-			cw.visit(56, ACC_PUBLIC + ACC_FINAL + ACC_SUPER + extraClassFlags, className, null, superName, null);
+			cw.visit(classFileVersion, ACC_PUBLIC + ACC_FINAL + ACC_SUPER + extraClassFlags, className, null, superName, null);
 		} else {
-			cw.visit(56, ACC_PUBLIC + ACC_FINAL + ACC_SUPER + ACC_VALUE_TYPE + extraClassFlags, className, null, superName, null);
+			cw.visit(classFileVersion, ACC_PUBLIC + ACC_FINAL + ACC_SUPER + ACC_VALUE_TYPE + extraClassFlags, className, null, superName, null);
 		}
 
 		cw.visitSource(className + ".java", null);
