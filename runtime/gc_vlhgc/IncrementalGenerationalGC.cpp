@@ -216,15 +216,12 @@ MM_IncrementalGenerationalGC::initialize(MM_EnvironmentVLHGC *env)
 	/* The Tarok policy always compacts since it can't handle dark matter in scan-only regions */
 	extensions->compactOnGlobalGC = true;
 
-	#define TAROK_DEFAULT_GC_EXPANSION_THRESHOLD 5
-	#define TAROK_DEFAULT_GC_CONTRACTION_THRESHOLD 2
-
 	if (!extensions->heapExpansionGCTimeThreshold._wasSpecified) {
-		extensions->heapExpansionGCTimeThreshold._valueSpecified = TAROK_DEFAULT_GC_EXPANSION_THRESHOLD;
+		extensions->heapExpansionGCTimeThreshold._valueSpecified = 5;
 	}
 
 	if (!extensions->heapContractionGCTimeThreshold._wasSpecified) {
-		extensions->heapContractionGCTimeThreshold._valueSpecified = TAROK_DEFAULT_GC_CONTRACTION_THRESHOLD;
+		extensions->heapContractionGCTimeThreshold._valueSpecified = 2;
 	}
 
 	/**
@@ -2008,7 +2005,7 @@ MM_IncrementalGenerationalGC::preConcurrentInitializeStatsAndReport(MM_Environme
 	omrthread_process_time_t processStart;
 	omrthread_get_process_times(&processStart);
 	U_64 concurrentMarkStartTime = processStart._systemTime + processStart._userTime;
-	stats->_concurrentMarkStartTime = (uintptr_t)concurrentMarkStartTime;
+	stats->_concurrentMarkProcessStartTime = (uintptr_t)concurrentMarkStartTime;
 
 	TRIGGER_J9HOOK_MM_PRIVATE_CONCURRENT_PHASE_START(
 			_extensions->privateHookInterface,
@@ -2081,7 +2078,7 @@ MM_IncrementalGenerationalGC::calculateConcurrentMarkWorkTime(MM_EnvironmentBase
 	U_64 processEndTime = processEnd._systemTime + processEnd._userTime;
 
 	/* Calculate how much process time has elapsed since the start of the concurrent mark increment */
-	U_64 concurrentElapsedTime = processEndTime - stats->_concurrentMarkStartTime;
+	U_64 concurrentElapsedTime = processEndTime - stats->_concurrentMarkProcessStartTime;
 
 	/* Work time we attribute to concurrent work is difference of process time of gc threads now vs when concurrent phase started */
 	MM_MarkVLHGCStats markStats = _persistentGlobalMarkPhaseState._vlhgcIncrementStats._markStats;
