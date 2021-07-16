@@ -164,7 +164,7 @@ MM_ParallelGlobalMarkTask::setup(MM_EnvironmentBase *envBase)
 	 */
 	int64_t gcThreadCpuTime = omrthread_get_cpu_time(env->getOmrVMThread()->_os_thread);
 	if (-1 != gcThreadCpuTime) {
-		env->_markVLHGCStats._concurrentGCThreadsStartTimeSum += gcThreadCpuTime;
+		env->_markVLHGCStats._concurrentGCThreadsCPUStartTimeSum += gcThreadCpuTime;
 	} 
 	
 	/* record that this thread is participating in this cycle */
@@ -184,7 +184,7 @@ MM_ParallelGlobalMarkTask::cleanup(MM_EnvironmentBase *envBase)
 	 */
 	int64_t gcThreadCpuTime = omrthread_get_cpu_time(env->getOmrVMThread()->_os_thread);
 	if (-1 != gcThreadCpuTime) {
-		env->_markVLHGCStats._concurrentGCThreadsEndTimeSum += gcThreadCpuTime;
+		env->_markVLHGCStats._concurrentGCThreadsCPUEndTimeSum += gcThreadCpuTime;
 	} 
 
 	static_cast<MM_CycleStateVLHGC*>(env->_cycleState)->_vlhgcIncrementStats._markStats.merge(&env->_markVLHGCStats);

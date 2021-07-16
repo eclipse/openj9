@@ -80,8 +80,8 @@ public:
 	UDATA _splitArraysProcessed; /**< The number of array chunks (not counting parts smaller than the split size) processed by this thread */
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 
-	U_64 _concurrentGCThreadsStartTimeSum; /**< The sum of all gc cpu thread times when concurrent gc work began */
-	U_64 _concurrentGCThreadsEndTimeSum; /**< The sum of all gc cpu thread times when concurrent gc work ended */
+	U_64 _concurrentGCThreadsCPUStartTimeSum; /**< The sum of all gc cpu thread times when concurrent gc work began */
+	U_64 _concurrentGCThreadsCPUEndTimeSum; /**< The sum of all gc cpu thread times when concurrent gc work ended */
 	U_64 _concurrentMarkGCThreadsTotalWorkTime; /**< The slowdown attributed to concurrent GC work */
 /* function members */
 private:
@@ -117,8 +117,8 @@ public:
 		_splitArraysProcessed = 0;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 
-		_concurrentGCThreadsStartTimeSum = 0;
-		_concurrentGCThreadsEndTimeSum = 0;
+		_concurrentGCThreadsCPUStartTimeSum = 0;
+		_concurrentGCThreadsCPUEndTimeSum = 0;
 		_concurrentMarkGCThreadsTotalWorkTime = 0;
 
 	}
@@ -148,8 +148,8 @@ public:
 		_doubleMappedArrayletsCandidates += statsToMerge->_doubleMappedArrayletsCandidates;
 #endif /* J9VM_GC_ENABLE_DOUBLE_MAP */	
 
-		_concurrentGCThreadsStartTimeSum += statsToMerge->_concurrentGCThreadsStartTimeSum;
-		_concurrentGCThreadsEndTimeSum += statsToMerge->_concurrentGCThreadsEndTimeSum;
+		_concurrentGCThreadsCPUStartTimeSum += statsToMerge->_concurrentGCThreadsCPUStartTimeSum;
+		_concurrentGCThreadsCPUEndTimeSum += statsToMerge->_concurrentGCThreadsCPUEndTimeSum;
 		_concurrentMarkGCThreadsTotalWorkTime += statsToMerge->_concurrentMarkGCThreadsTotalWorkTime;
 
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
@@ -179,8 +179,8 @@ public:
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 		,_splitArraysProcessed(0)
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
-		,_concurrentGCThreadsStartTimeSum(0)
-		,_concurrentGCThreadsEndTimeSum(0)
+		,_concurrentGCThreadsCPUStartTimeSum(0)
+		,_concurrentGCThreadsCPUEndTimeSum(0)
 		,_concurrentMarkGCThreadsTotalWorkTime(0)
 	{
 	}

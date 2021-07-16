@@ -216,14 +216,6 @@ MM_IncrementalGenerationalGC::initialize(MM_EnvironmentVLHGC *env)
 	/* The Tarok policy always compacts since it can't handle dark matter in scan-only regions */
 	extensions->compactOnGlobalGC = true;
 
-	if (!extensions->heapExpansionGCTimeThreshold._wasSpecified) {
-		extensions->heapExpansionGCTimeThreshold._valueSpecified = 5;
-	}
-
-	if (!extensions->heapContractionGCTimeThreshold._wasSpecified) {
-		extensions->heapContractionGCTimeThreshold._valueSpecified = 2;
-	}
-
 	/**
 	 * Set maximum allocation age based on logical maximum age
 	 * except it has not been hard coded in command line
@@ -2084,10 +2076,10 @@ MM_IncrementalGenerationalGC::calculateConcurrentMarkWorkTime(MM_EnvironmentBase
 	MM_MarkVLHGCStats markStats = _persistentGlobalMarkPhaseState._vlhgcIncrementStats._markStats;
 	double concurrentGCRatio = 0.5;
 
-	if (markStats._concurrentGCThreadsEndTimeSum != markStats._concurrentGCThreadsStartTimeSum) {
+	if (markStats._concurrentGCThreadsCPUEndTimeSum != markStats._concurrentGCThreadsCPUStartTimeSum) {
 		/* If the platform supports getting time for each thread, calculate what % of time gc threads were active relative to application threads. */
 		/* Determine the ratio of time spent doing GC work vs non-gc related work during the concurrent phase */
-		U_64 concurrentGCWorkTime = markStats._concurrentGCThreadsEndTimeSum - markStats._concurrentGCThreadsStartTimeSum;
+		U_64 concurrentGCWorkTime = markStats._concurrentGCThreadsCPUEndTimeSum - markStats._concurrentGCThreadsCPUStartTimeSum;
 		concurrentGCRatio = (double)concurrentGCWorkTime/concurrentElapsedTime;
 
 		/* If there was a clock error, concurrentGCWorkTime might be too high or negative. Make sure ratio is between 0.1 and 0.9 */

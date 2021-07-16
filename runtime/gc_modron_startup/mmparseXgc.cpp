@@ -676,8 +676,8 @@ j9gc_initialize_parse_gc_colon(J9JavaVM *javaVM, char **scan_start)
 			j9nls_printf(PORTLIB, J9NLS_ERROR, J9NLS_GC_OPTIONS_INTEGER_OUT_OF_RANGE, "dnssExpectedTimeRatioMinimum=", (UDATA)0, (UDATA)100);
 			goto _error;
 		}
-		extensions->dnssExpectedTimeRatioMinimum._wasSpecified = true;
-		extensions->dnssExpectedTimeRatioMinimum._valueSpecified = ((double)value) / ((double)100);
+		extensions->dnssExpectedRatioMinimum._wasSpecified = true;
+		extensions->dnssExpectedRatioMinimum._valueSpecified = ((double)value) / ((double)100);
 		goto _exit;
 	}
 
@@ -690,8 +690,8 @@ j9gc_initialize_parse_gc_colon(J9JavaVM *javaVM, char **scan_start)
 			j9nls_printf(PORTLIB, J9NLS_ERROR, J9NLS_GC_OPTIONS_INTEGER_OUT_OF_RANGE, "dnssExpectedTimeRatioMaximum=", (UDATA)0, (UDATA)100);
 			goto _error;
 		}
-		extensions->dnssExpectedTimeRatioMaximum._wasSpecified = true;
-		extensions->dnssExpectedTimeRatioMaximum._valueSpecified = ((double)value) / ((double)100);
+		extensions->dnssExpectedRatioMaximum._wasSpecified = true;
+		extensions->dnssExpectedRatioMaximum._valueSpecified = ((double)value) / ((double)100);
 		goto _exit;
 	}
 

@@ -310,13 +310,21 @@ MM_ConfigurationIncrementalGenerational::initialize(MM_EnvironmentBase *env)
 		extensions->tarokMinimumGMPWorkTargetBytes._valueSpecified = extensions->regionSize;
 	}
 
-	if (!extensions->dnssExpectedTimeRatioMaximum._wasSpecified) {
-		extensions->dnssExpectedTimeRatioMaximum._valueSpecified = 0.05;
+	if (!extensions->dnssExpectedRatioMaximum._wasSpecified) {
+		extensions->dnssExpectedRatioMaximum._valueSpecified = 0.05;
 	} 
 
-	if (!extensions->dnssExpectedTimeRatioMinimum._wasSpecified) {
-		extensions->dnssExpectedTimeRatioMinimum._valueSpecified = 0.02;
+	if (!extensions->dnssExpectedRatioMinimum._wasSpecified) {
+		extensions->dnssExpectedRatioMinimum._valueSpecified = 0.02;
 	} 
+
+	if (!extensions->heapExpansionGCRatioThreshold._wasSpecified) {
+		extensions->heapExpansionGCRatioThreshold._valueSpecified = 5;
+	}
+
+	if (!extensions->heapContractionGCRatioThreshold._wasSpecified) {
+		extensions->heapContractionGCRatioThreshold._valueSpecified = 2;
+	}
 
 	return result;
 }

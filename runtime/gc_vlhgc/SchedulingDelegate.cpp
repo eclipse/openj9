@@ -154,7 +154,7 @@ MM_SchedulingDelegate::initialize(MM_EnvironmentVLHGC *env)
 
 	_maxEdenRegionCount = (uintptr_t)(maxHeapSize * maxEdenPercent) / _regionManager->getRegionSize();
 
-	_partialGcOverhead = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified;
+	_partialGcOverhead = _extensions->dnssExpectedRatioMaximum._valueSpecified;
 
 	return true;
 }
@@ -1484,13 +1484,13 @@ MM_SchedulingDelegate::calculateEdenChangeHeapNotFullyExpanded(MM_EnvironmentVLH
 	Trc_MM_SchedulingDelegate_calculateEdenChangeHeapNotFullyExpanded(env->getLanguageVMThread(), hybridEdenOverhead, (uintptr_t)_recentPartialGCTime, mapPgcPauseOverheadToPgcCPUOverhead(env, (uintptr_t)_recentPartialGCTime, false));
 	 
 	/* 
-	 * Aim to get hybrid PGC overhead between extensions->dnssExpectedTimeRatioMinimum and extensions->dnssExpectedTimeRatioMaximum 
+	 * Aim to get hybrid PGC overhead between extensions->dnssExpectedRatioMinimum and extensions->dnssExpectedRatioMaximum 
 	 * by increasing or decreasing eden by edenChangePctHeapNotFullyExpanded
 	 */
-	if (_extensions->dnssExpectedTimeRatioMinimum._valueSpecified > hybridEdenOverhead ) {
+	if (_extensions->dnssExpectedRatioMinimum._valueSpecified > hybridEdenOverhead ) {
 		/* Shrink eden a bit */
 		edenRegionChange = edenChangeMagnitude * -1;
-	} else if (_extensions->dnssExpectedTimeRatioMaximum._valueSpecified < hybridEdenOverhead) {
+	} else if (_extensions->dnssExpectedRatioMaximum._valueSpecified < hybridEdenOverhead) {
 		/* Expand eden a bit */
 		edenRegionChange = edenChangeMagnitude;
 	}
@@ -1501,8 +1501,8 @@ double
 MM_SchedulingDelegate::mapPgcPauseOverheadToPgcCPUOverhead(MM_EnvironmentVLHGC *env, uintptr_t pgcPauseTimeMs, bool heapFullyExpanded) {
 	
 	/* Convert expectedTimeRatioMinimum/Maximum to 0-100 based for this formula */
-	const double xminpct = _extensions->dnssExpectedTimeRatioMinimum._valueSpecified * 100;
-	const double xmaxpct = _extensions->dnssExpectedTimeRatioMaximum._valueSpecified * 100;
+	const double xminpct = _extensions->dnssExpectedRatioMinimum._valueSpecified * 100;
+	const double xmaxpct = _extensions->dnssExpectedRatioMaximum._valueSpecified * 100;
 	const double targetPauseTimeMs = (double)_extensions->tarokTargetMaxPauseTime;
 	const double pauseTimeTooHighOverheadLogBase = 1.0156;
 
