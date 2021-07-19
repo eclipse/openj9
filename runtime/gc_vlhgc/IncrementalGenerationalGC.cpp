@@ -2070,7 +2070,7 @@ MM_IncrementalGenerationalGC::calculateConcurrentMarkWorkTime(MM_EnvironmentBase
 	U_64 processEndTime = processEnd._systemTime + processEnd._userTime;
 
 	/* Calculate how much process time has elapsed since the start of the concurrent mark increment */
-	U_64 concurrentElapsedTime = processEndTime - stats->_concurrentMarkProcessStartTime;
+	U_64 concurrentCpuElapsedTime = processEndTime - stats->_concurrentMarkProcessStartTime;
 
 	/* Work time we attribute to concurrent work is difference of process time of gc threads now vs when concurrent phase started */
 	MM_MarkVLHGCStats markStats = _persistentGlobalMarkPhaseState._vlhgcIncrementStats._markStats;
@@ -2079,18 +2079,25 @@ MM_IncrementalGenerationalGC::calculateConcurrentMarkWorkTime(MM_EnvironmentBase
 	if (markStats._concurrentGCThreadsCPUEndTimeSum != markStats._concurrentGCThreadsCPUStartTimeSum) {
 		/* If the platform supports getting time for each thread, calculate what % of time gc threads were active relative to application threads. */
 		/* Determine the ratio of time spent doing GC work vs non-gc related work during the concurrent phase */
-		U_64 concurrentGCWorkTime = markStats._concurrentGCThreadsCPUEndTimeSum - markStats._concurrentGCThreadsCPUStartTimeSum;
-		concurrentGCRatio = (double)concurrentGCWorkTime/concurrentElapsedTime;
+		U_64 concurrentGcCpuWorkTime = markStats._concurrentGCThreadsCPUEndTimeSum - markStats._concurrentGCThreadsCPUStartTimeSum;
+		concurrentGCRatio = (double)concurrentGcCpuWorkTime/concurrentCpuElapsedTime;
 
-		/* If there was a clock error, concurrentGCWorkTime might be too high or negative. Make sure ratio is between 0.1 and 0.9 */
+		/* If there was a clock error, concurrentGcCpuWorkTime might be too high or negative. Make sure ratio is between 0.1 and 0.9 */
 		concurrentGCRatio = OMR_MIN(concurrentGCRatio, 0.9);
 		concurrentGCRatio = OMR_MAX(concurrentGCRatio, 0.1);
 	} 
 
-	/* The GC time we attribute to concurrent phase is (ratio of time doing GC work instead of mutator work) * time interval of concurrent mark increment */
-	U_64 concurrentMarkGCThreadsWorkTime = (U_64)(concurrentElapsedTime * concurrentGCRatio);
-	_persistentGlobalMarkPhaseState._vlhgcCycleStats._concurrentMarkStats._concurrentMarkGCThreadsTotalWorkTime += concurrentMarkGCThreadsWorkTime;
+	/* 
+	 * The slowdown to the application due concurrent GMP work, is closely related to concurrentGCRatio, but requires some extra analysis
+	 * 
+	 * If GC ratio is high because CPU is underutilized by application threads, then the slowdown is 1 - concurrentGCRatio.
+ 	 * If CPU ratio is low because application threads are overloading CPU, then slowdown is concurrentGCRatio. 
+	 */
+	concurrentGCRatio = OMR_MIN(1.0 - concurrentGCRatio, concurrentGCRatio);
 
+	/* The GC time we attribute to concurrent phase is (ratio of time doing GC work instead of mutator work) * time interval of concurrent mark increment */
+	U_64 concurrentMarkGCThreadsWorkTime = (U_64)(concurrentCpuElapsedTime * concurrentGCRatio);
+	_persistentGlobalMarkPhaseState._vlhgcCycleStats._concurrentMarkStats._concurrentMarkGCThreadsTotalWorkTime += concurrentMarkGCThreadsWorkTime;
 	Trc_MM_IncrementalGenerationalGC_calculateConcurrentMarkWorkTime(env->getLanguageVMThread(), concurrentGCRatio, concurrentMarkGCThreadsWorkTime / 1000, _persistentGlobalMarkPhaseState._vlhgcCycleStats._concurrentMarkStats._concurrentMarkGCThreadsTotalWorkTime / 1000);
 
 	_schedulingDelegate.setConcurrentGlobalMarkTime(_persistentGlobalMarkPhaseState._vlhgcCycleStats._concurrentMarkStats._concurrentMarkGCThreadsTotalWorkTime);

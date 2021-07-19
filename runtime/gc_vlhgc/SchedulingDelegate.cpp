@@ -60,7 +60,6 @@ const double measureScanRateHistoricWeightForPGC = 0.95;
 const double partialGCTimeHistoricWeight = 0.50;
 const double incrementalScanTimePerGMPHistoricWeight = 0.50;
 const double bytesScannedConcurrentlyPerGMPHistoricWeight = 0.50;
-const double concurrentGMPWorkWeight = 0.5;
 const double pgcCpuOverheadWeight = 0.5;
 const double pgcIntervalHistoricWeight = 0.5;
 const double pgcOverheadHistoricWeight = 0.5;
@@ -194,8 +193,7 @@ MM_SchedulingDelegate::calculateGlobalMarkOverhead(MM_EnvironmentVLHGC *env) {
 	uint64_t globalMarkIntervalEndTime = j9time_hires_clock();
 	uint64_t globalMarkIntervalTime = j9time_hires_delta(_globalMarkIntervalStartTime, globalMarkIntervalEndTime, J9PORT_TIME_DELTA_IN_MICROSECONDS);
 
-	/* Determine the cost we attribute to concurrent GMP work from previous cycle. Since mutator threads might have been idle, reduce weight of concurrent GMP work by a factor of gmpConcurrentCostWeight */
-	uint64_t concurrentCostUs = (_concurrentMarkGCThreadsTotalWorkTime / 1000) * concurrentGMPWorkWeight;
+	uint64_t concurrentCostUs = _concurrentMarkGCThreadsTotalWorkTime / 1000;
 
 	/* Total GMP work time, is time taken for all increments + the time we attribute for concurrent GC parts of GMP, and global sweep time. */
 	uint64_t potentialGMPWorkTime =  _globalMarkIncrementsTotalTime + _globalSweepTimeUs + concurrentCostUs;
