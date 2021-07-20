@@ -35,10 +35,6 @@
 #include "TgcExtensions.hpp"
 #include "VMThreadListIterator.hpp"
 
-#if defined(J9VM_GC_MODRON_SCAVENGER)
-#include "Scavenger.hpp"
-#endif /* OMR_GC_MODRON_SCAVENGER */
-
 /****************************************
  * Hook callbacks
  ****************************************
