@@ -83,12 +83,25 @@ public class TestCloseScope0 {
 	@Test(expectedExceptions=java.lang.IllegalStateException.class)
 	public static void closeScopeDuringAccess() throws Throwable {
 		/* Reflect setup */
-		Class c = Class.forName("jdk.internal.foreign.MemoryScope");
-		Method createShared = c.getDeclaredMethod("createShared", new Class[] {Object.class, Runnable.class, Cleaner.class});
-		createShared.setAccessible(true);
-		Method close = c.getDeclaredMethod("close");
+		Class MemoryOrResourceScope;
+		Method createShared;
+		Method close;
+		Object scope;
+
+		String version = System.getProperty("java.vm.specification.version");
+		if (Integer.parseInt(version) == 16) {
+			MemoryOrResourceScope = Class.forName("jdk.internal.foreign.MemoryScope");
+			createShared = MemoryOrResourceScope.getDeclaredMethod("createShared", new Class[] {Object.class, Runnable.class, Cleaner.class});
+			createShared.setAccessible(true);
+			scope = createShared.invoke(null, null, new Thread(), null);
+		} else {
+			MemoryOrResourceScope = Class.forName("jdk.internal.foreign.ResourceScopeImpl");
+			createShared = MemoryOrResourceScope.getDeclaredMethod("createShared", new Class[] {Cleaner.class});
+			createShared.setAccessible(true);
+			scope = createShared.invoke(null, Cleaner.create());
+		}
+		close = MemoryOrResourceScope.getDeclaredMethod("close");
 		close.setAccessible(true);
-		final Object scope = createShared.invoke(null, null, new Thread(), null);
 
 		Class Scope = Class.forName("jdk.internal.misc.ScopedMemoryAccess$Scope");
 		/* End Reflect setup */
