@@ -153,6 +153,11 @@ class CheckEngine
 	{
 		return (_cycle.getMiscFlags() & J9MODRON_GCCHK_MISC_MIDSCAVENGE) != 0;
 	}
+
+	public boolean isIndexableDataAddressFlagSet()
+	{
+		return (_cycle.getMiscFlags() & J9MODRON_GCCHK_VALID_INDEXABLE_DATA_ADDRESS) != 0;
+	}
 	
 	public boolean isScavengerBackoutFlagSet()
 	{
@@ -1187,6 +1192,29 @@ class CheckEngine
 
 			if (J9MODRON_GCCHK_RC_OK != ret) {
 				return ret;
+			}
+		}
+
+		if (GCExtensions.isVLHGC() && J9BuildFlags.env_data64 && isIndexableDataAddressFlagSet() && ObjectModel.isIndexable(object)) {
+			try {
+				boolean isCorrectData = false;
+				J9IndexableObjectPointer array = J9IndexableObjectPointer.cast(object);
+				if (J9IndexableObjectHelper.isInlineContiguousArraylet(array)) {
+					isCorrectData = J9IndexableObjectHelper.getDataAddrForContiguous(array).equals(VoidPointer.cast(array.addOffset(J9IndexableObjectHelper.contiguousHeaderSize())));
+				} else {
+					isCorrectData = J9IndexableObjectHelper.getDataAddrForDiscontiguous(array).equals(VoidPointer.cast(array.addOffset(J9IndexableObjectHelper.discontiguousHeaderSize())));
+				}
+
+				if (false == isCorrectData) {
+					return J9MODRON_GCCHK_RC_INVALID_INDEXABLE_DATA_ADDRESS;
+				}
+			} catch (NoSuchFieldException e) {
+				/*
+				 * Do nothing - NoSuchFieldException from trying to access the indexable object field "dataAddr"
+				 * is due to the incorrect usage of gccheck misc option "indexabledataaddress"
+				 * on a core file that was generated from a build where the "dataAddr" field does not exists yet
+				 */
+				_cycle.clearIndexableDataAddrCheckMiscFlag();
 			}
 		}
 		
