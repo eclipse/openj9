@@ -196,12 +196,14 @@ free:
 jobject JNICALL
 Java_org_eclipse_openj9_criu_CRIUSupport_checkpointJVMImpl(JNIEnv *env,
 							jclass unused,
-							jstring checkPointDir,
-							jboolean keepRunning,
+							jstring imagesDir,
+							jboolean leaveRunning,
 							jboolean shellJob,
 							jboolean extUnixSupport,
 							jint logLevel,
-							jstring logFile)
+							jstring logFile,
+							jboolean fileLocks,
+							jstring workDir)
 {
 	J9VMThread *currentThread = (J9VMThread*)env;
 	J9JavaVM *vm = currentThread->javaVM;
@@ -214,27 +216,36 @@ Java_org_eclipse_openj9_criu_CRIUSupport_checkpointJVMImpl(JNIEnv *env,
 #if defined(LINUX)
 		j9object_t cpDir = NULL;
 		j9object_t log = NULL;
+		j9object_t wrkDir = NULL;
 		IDATA dirFD = 0;
+		IDATA workDirFD = 0;
 		char directoryBuf[STRING_BUFFER_SIZE];
 		char *directoryChars = directoryBuf;
 		char logFileBuf[STRING_BUFFER_SIZE];
 		char *logFileChars = logFileBuf;
+		char workDirBuf[STRING_BUFFER_SIZE];
+		char *workDirChars = workDirBuf;
 		IDATA systemReturnCode = 0;
 		PORT_ACCESS_FROM_VMC(currentThread);
 
 		vmFuncs->internalEnterVMFromJNI(currentThread);
 
-		cpDir = J9_JNI_UNWRAP_REFERENCE(checkPointDir);
-		log = J9_JNI_UNWRAP_REFERENCE(logFile);
+		Assert_JCL_notNull(imagesDir);
+		cpDir = J9_JNI_UNWRAP_REFERENCE(imagesDir);
+		if (NULL != logFile) {
+			log = J9_JNI_UNWRAP_REFERENCE(logFile);
+		}
 
 		if (FALSE == getNativeString(currentThread, cpDir, &directoryChars, &resultType)) {
 			/* errors and return codes are set in the helper */
 			goto freeDir;
 		}
 
-		if (FALSE == getNativeString(currentThread, log, &logFileChars, &resultType)) {
-			/* errors and return codes are set in the helper */
-			goto freeLog;
+		if (NULL != logFile) {
+			if (FALSE == getNativeString(currentThread, log, &logFileChars, &resultType)) {
+				/* errors and return codes are set in the helper */
+				goto freeLog;
+			}
 		}
 
 		dirFD = open(directoryChars, O_DIRECTORY);
@@ -245,19 +256,43 @@ Java_org_eclipse_openj9_criu_CRIUSupport_checkpointJVMImpl(JNIEnv *env,
 			goto freeLog;
 		}
 
+		if (NULL != workDir) {
+			wrkDir = J9_JNI_UNWRAP_REFERENCE(workDir);
+			if (FALSE == getNativeString(currentThread, wrkDir, &workDirChars, &resultType)) {
+				/* errors and return codes are set in the helper */
+				goto freeWorkDir;
+			}
+			
+			workDirFD = open(workDirChars, O_DIRECTORY);
+			if (workDirFD < 0) {
+				systemReturnCode = errno;
+				vmFuncs->setCurrentExceptionNLSWithArgs(currentThread, J9NLS_JCL_CRIU_FAILED_TO_OPEN_DIR, J9VMCONSTANTPOOL_JAVALANGINTERNALERROR, systemReturnCode);
+				resultType = vm->criuSupportInvalidArguments;
+				goto freeWorkDir;
+			}
+		}
+
 		systemReturnCode = criu_init_opts();
 		if (0 != systemReturnCode) {
 			vmFuncs->setCurrentExceptionNLSWithArgs(currentThread, J9NLS_JCL_CRIU_INIT_FAILED, J9VMCONSTANTPOOL_JAVALANGINTERNALERROR, systemReturnCode);
 			resultType = vm->criuSupportSystemCheckpointFailure;
-			goto freeLog;
+			goto closeWorkDirFD;
 		}
 
 		criu_set_images_dir_fd(dirFD);
 		criu_set_shell_job(FALSE != shellJob);
-		criu_set_log_level((int)logLevel);
-		criu_set_log_file(logFileChars);
-		criu_set_leave_running(FALSE != keepRunning);
+		if (logLevel > 0) {
+			criu_set_log_level((int)logLevel);
+		}
+		if (NULL != logFile) {
+			criu_set_log_file(logFileChars);
+		}
+		criu_set_leave_running(FALSE != leaveRunning);
 		criu_set_ext_unix_sk(FALSE != extUnixSupport);
+		criu_set_file_locks(FALSE != fileLocks);
+		if (NULL != workDir) {
+			criu_set_work_dir_fd(workDirFD);
+		}
 
 		vmFuncs->acquireExclusiveVMAccess(currentThread);
 
@@ -283,16 +318,25 @@ Java_org_eclipse_openj9_criu_CRIUSupport_checkpointJVMImpl(JNIEnv *env,
 		resultType = vm->criuSupportSuccess;
 
 releaseExclusive:
+		vmFuncs->releaseExclusiveVMAccess(currentThread);
+closeWorkDirFD:
+		if (0 != close(workDirFD)) {
+			systemReturnCode = errno;
+			resultType = vm->criuSupportJVMRestoreFailure;
+			vmFuncs->setCurrentExceptionNLSWithArgs(currentThread, J9NLS_JCL_CRIU_FAILED_TO_CLOSE_DIR, J9VMCONSTANTPOOL_JAVALANGINTERNALERROR, systemReturnCode);
+		}
+freeWorkDir:
 		if (0 != close(dirFD)) {
 			systemReturnCode = errno;
 			resultType = vm->criuSupportJVMRestoreFailure;
 			vmFuncs->setCurrentExceptionNLSWithArgs(currentThread, J9NLS_JCL_CRIU_FAILED_TO_CLOSE_DIR, J9VMCONSTANTPOOL_JAVALANGINTERNALERROR, systemReturnCode);
 		}
-		vmFuncs->releaseExclusiveVMAccess(currentThread);
-
+		if (workDirChars != workDirBuf) {
+			j9mem_free_memory(workDirChars);
+		}
 freeLog:
 		if (logFileChars != logFileBuf) {
-			j9mem_free_memory(directoryChars);
+			j9mem_free_memory(logFileChars);
 		}
 freeDir:
 		if (directoryChars != directoryBuf) {
