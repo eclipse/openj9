@@ -104,7 +104,14 @@ public final class CRIUSupport {
 	
 	private static native boolean isCheckpointAllowed();
 
-	private native CRIUResult checkpointJVMImpl();
+	private static native CRIUResult checkpointJVMImpl(String imagesDir,
+                                                       boolean leaveRunning,
+                                                       boolean shellJob,
+                                                       boolean extUnixSupport,
+                                                       int logLevel,
+                                                       String logFile,
+                                                       boolean fileLocks,
+                                                       String workDir);
 
 	/**
 	 * Constructs a new {@code CRIUSupport}.
@@ -300,7 +307,14 @@ public final class CRIUSupport {
 		CRIUResult ret;
 
 		if (isCRIUSupportEnabled()) {
-			ret = checkpointJVMImpl();
+			ret = checkpointJVMImpl(imagesDir,
+                                    leaveRunning,
+                                    shellJob,
+                                    extUnixSupport,
+                                    logLevel,
+                                    logFile,
+                                    fileLocks,
+                                    workDir);
 		} else {
 			ret = new CRIUResult(CRIUResultType.UNSUPPORTED_OPERATION, null);
 		}
